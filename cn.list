@@ -1,0 +1,12 @@
+## 一些容易误判的境内域名
+## version: 0.1.0
+
+HOST,chende.ren,direct
+HOST,go-zero.dev,direct
+HOST,limestart.cn,direct
+HOST,hf-mirror.com,direct 
+HOST,mu.yushe.org,direct
+HOST,rustdesk.com,direct
+HOST,answer.ai,direct
+HOST,konglingfei.com,direct
+HOST,gin-vue-admin.com,direct
