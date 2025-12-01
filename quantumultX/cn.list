@@ -14,6 +14,8 @@ HOST,dtm.pub,direct
 HOST,guangzhengli.com,direct
 HOST,zeronews.cc,direct
 HOST,qlime.cn,direct
+HOST,vben.pro,direct
+
 HOST-SUFFIX,vben.pro,direct
 HOST-SUFFIX,todesk.com,direct
 HOST-SUFFIX,gorm.io,direct
@@ -21,3 +23,5 @@ HOST-SUFFIX,go-kratos.dev,direct
 HOST-SUFFIX,xuanyuan.cloud,direct
 HOST-SUFFIX,xuanyuan.run,direct
 HOST-SUFFIX,dockerproxy.net,direct
+
+
