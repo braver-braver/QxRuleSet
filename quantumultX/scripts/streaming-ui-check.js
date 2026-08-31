@@ -491,7 +491,7 @@ function testYouTube() {
         result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
       } else {
         let region = 'US'
-        let re = /"GL":"(.*?)"/gm
+        let re = /"gl":"(.*?)"/gm
         let ret = re.exec(body)
         if (ret && ret.length === 2) {
           region = ret[1]
