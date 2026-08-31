@@ -22,7 +22,15 @@
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 const arrow = " ➟ "
-const TIMEOUT = 5000
+// Trace/API 请求通常很快，网页和流媒体在移动网络上需要更长时间。
+const TIMEOUTS = {
+  trace: 4000,
+  api: 7000,
+  web: 9000,
+  streaming: 10000
+}
+const MAX_ATTEMPTS = 2
+const RETRY_DELAY = 600
 
 // --- Claude ---
 const CLAUDE_WEB_URL     = 'https://claude.ai'
@@ -42,6 +50,7 @@ const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/mod
 // 命中大陆网络时，Google 会返回 zh-CN 简体页面 / 302 到 google.cn / 触发 sorry 人机验证
 const GOOGLE_URL          = 'https://www.google.com/'
 const GOOGLE_NOSSL_URL    = 'http://www.google.com/generate_204'
+const REGION_FALLBACK_URL  = 'https://ipapi.co/json/'
 
 // --- 流媒体 ---
 const NETFLIX_URL        = 'https://www.netflix.com/title/81280792'
@@ -118,69 +127,95 @@ function flag(region) {
   return flags.get(region.toUpperCase()) || region
 }
 
+// Quantumult X 只会在网络层失败时 reject；HTTP 错误仍然会 resolve。
+// 重试只针对可恢复的网络失败，避免对明确的 4xx/5xx 重复请求。
+function fetchWithRetry(request) {
+  return new Promise((resolve, reject) => {
+    let attempt = 0
+    let run = () => {
+      attempt++
+      $task.fetch(request).then(resolve, err => {
+        if (attempt < MAX_ATTEMPTS) {
+          setTimeout(run, RETRY_DELAY * attempt)
+        } else {
+          reject(err)
+        }
+      })
+    }
+    run()
+  })
+}
+
+function networkErrorLabel(err) {
+  let message = String(err || '').toLowerCase()
+  if (message.indexOf('timeout') !== -1 || message.indexOf('timed out') !== -1) return '检测超时 🚦'
+  if (message.indexOf('dns') !== -1 || message.indexOf('getaddrinfo') !== -1 || message.indexOf('resolve') !== -1) return 'DNS 失败 🚫'
+  if (message.indexOf('refused') !== -1 || message.indexOf('reset') !== -1 || message.indexOf('connect') !== -1) return '连接失败 🚫'
+  return '网络错误 🚦'
+}
+
+async function getRegion(traceUrl) {
+  try {
+    let trace = await fetchWithRetry({ url: traceUrl, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    if (trace.statusCode === 200) {
+      let region = regionFromTrace(trace.body)
+      if (region) return region
+    }
+  } catch (e) {}
+
+  try {
+    let fallback = await fetchWithRetry({ url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    if (fallback.statusCode === 200) {
+      let data = JSON.parse(fallback.body || '{}')
+      if (data.country_code) return String(data.country_code).toUpperCase()
+    }
+  } catch (e) {}
+  return ''
+}
+
 // ===================== 检测: Claude Web =====================
 
 function testClaude() {
-  return new Promise((resolve) => {
-    // 1) Cloudflare Trace 获取地区
-    $task.fetch({
-      url: CLAUDE_TRACE_URL,
-      opts: opts,
-      timeout: TIMEOUT,
-      headers: { 'User-Agent': UA }
-    }).then(traceResp => {
-      let region = (traceResp.statusCode === 200) ? regionFromTrace(traceResp.body) : ''
-      let f = flag(region)
-
-      // 2) 检测 claude.ai 是否可访问
-      $task.fetch({
+  return (async () => {
+    let region = await getRegion(CLAUDE_TRACE_URL)
+    let f = flag(region)
+    try {
+      let resp = await fetchWithRetry({
         url: CLAUDE_WEB_URL,
         opts: opts,
-        timeout: TIMEOUT,
-        headers: {
-          'User-Agent': UA,
-          'Accept-Language': 'en-US,en;q=0.9'
-        }
-      }).then(resp => {
-        let s = resp.statusCode
-        let body = (resp.body || '').toLowerCase()
-
-        if (s === 403 || s === 451) {
-          result.Claude = "<b>Claude: </b>未支持 🚫"
-        } else if (s >= 200 && s < 400) {
-          // 检查页面内容是否包含地区限制提示
-          if (body.indexOf('unavailable') !== -1 ||
-              body.indexOf('not available') !== -1 ||
-              body.indexOf('unsupported_region') !== -1 ||
-              body.indexOf('restricted') !== -1) {
-            result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
-          } else {
-            result.Claude = "<b>Claude: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
-          }
-        } else {
-          result.Claude = "<b>Claude: </b>异常 (" + s + ") ❗️"
-        }
-        resolve()
-      }, () => {
-        result.Claude = "<b>Claude: </b>检测超时 🚦"
-        resolve()
+        timeout: TIMEOUTS.web,
+        headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
       })
-    }, () => {
-      result.Claude = "<b>Claude: </b>检测超时 🚦"
-      resolve()
-    })
-  })
+      let s = resp.statusCode
+      let body = (resp.body || '').toLowerCase()
+      // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
+      // “unavailable/restricted” 可能来自打包脚本，不能单独作为判据。
+      let structuredBlock = body.indexOf('"unsupported_region":true') !== -1 ||
+        body.indexOf('"unsupported_region": true') !== -1
+      let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
+      let deniedTitle = titleMatch && /access denied|country not supported|not available in your country/.test(titleMatch[1])
+      if (s === 403 || s === 451 || structuredBlock || deniedTitle) {
+        result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
+      } else if (s >= 200 && s < 400) {
+        result.Claude = "<b>Claude: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
+      } else {
+        result.Claude = "<b>Claude: </b>异常 (" + s + ") ❗️"
+      }
+    } catch (e) {
+      result.Claude = "<b>Claude: </b>" + networkErrorLabel(e)
+    }
+  })()
 }
 
 // ===================== 检测: Claude API =====================
 
 function testClaudeAPI() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: CLAUDE_API_URL,
       method: 'POST',
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.api,
       headers: {
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01',
@@ -211,8 +246,8 @@ function testClaudeAPI() {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
       }
       resolve()
-    }, () => {
-      result.ClaudeAPI = "<b>Claude API: </b>不可用 🚫"
+    }, err => {
+      result.ClaudeAPI = "<b>Claude API: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -221,74 +256,35 @@ function testClaudeAPI() {
 // ===================== 检测: ChatGPT Web =====================
 
 function testChatGPT() {
-  return new Promise((resolve) => {
-    // 1) Cloudflare Trace 获取地区
-    $task.fetch({
-      url: CHATGPT_TRACE_URL,
-      opts: opts,
-      timeout: TIMEOUT,
-      headers: { 'User-Agent': UA }
-    }).then(traceResp => {
-      let region = (traceResp.statusCode === 200) ? regionFromTrace(traceResp.body) : ''
-      let f = flag(region)
-
-      // 2) 检测 chatgpt.com 是否可访问
-      $task.fetch({
-        url: CHATGPT_WEB_URL,
-        opts: opts_noRedirect,
-        timeout: TIMEOUT,
-        headers: { 'User-Agent': UA }
-      }).then(resp => {
-        let respStr = JSON.stringify(resp)
-        let s = resp.statusCode
-        let isBlocked = respStr.indexOf('text/plain') !== -1
-
-        if (isBlocked || s === 403) {
-          result.ChatGPT = "<b>ChatGPT: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
-        } else if (s >= 200 && s < 400) {
-          result.ChatGPT = "<b>ChatGPT: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
-        } else {
-          result.ChatGPT = "<b>ChatGPT: </b>异常 (" + s + ") ❗️"
-        }
-        resolve()
-      }, () => {
-        result.ChatGPT = "<b>ChatGPT: </b>检测超时 🚦"
-        resolve()
-      })
-    }, () => {
-      // Trace 失败 → 仅做页面可达性检测
-      $task.fetch({
-        url: CHATGPT_WEB_URL,
-        opts: opts_noRedirect,
-        timeout: TIMEOUT,
-        headers: { 'User-Agent': UA }
-      }).then(resp => {
-        let respStr = JSON.stringify(resp)
-        let isBlocked = respStr.indexOf('text/plain') !== -1
-        if (isBlocked || resp.statusCode === 403) {
-          result.ChatGPT = "<b>ChatGPT: </b>未支持 🚫"
-        } else if (resp.statusCode >= 200 && resp.statusCode < 400) {
-          result.ChatGPT = "<b>ChatGPT: </b>支持 🎉"
-        } else {
-          result.ChatGPT = "<b>ChatGPT: </b>异常 ❗️"
-        }
-        resolve()
-      }, () => {
-        result.ChatGPT = "<b>ChatGPT: </b>检测超时 🚦"
-        resolve()
-      })
-    })
-  })
+  return (async () => {
+    let region = await getRegion(CHATGPT_TRACE_URL)
+    let f = flag(region)
+    try {
+      let resp = await fetchWithRetry({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
+      let respStr = JSON.stringify(resp)
+      let s = resp.statusCode
+      let isBlocked = respStr.indexOf('text/plain') !== -1
+      if (isBlocked || s === 403 || s === 451) {
+        result.ChatGPT = "<b>ChatGPT: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
+      } else if (s >= 200 && s < 400) {
+        result.ChatGPT = "<b>ChatGPT: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
+      } else {
+        result.ChatGPT = "<b>ChatGPT: </b>异常 (" + s + ") ❗️"
+      }
+    } catch (e) {
+      result.ChatGPT = "<b>ChatGPT: </b>" + networkErrorLabel(e)
+    }
+  })()
 }
 
 // ===================== 检测: OpenAI API =====================
 
 function testOpenAIAPI() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: OPENAI_API_URL,
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.api,
       headers: {
         'Authorization': 'Bearer sk-test-00000000',
         'User-Agent': UA
@@ -310,8 +306,8 @@ function testOpenAIAPI() {
         result.OpenAIAPI = "<b>OpenAI API: </b>异常 (" + s + ") ❗️"
       }
       resolve()
-    }, () => {
-      result.OpenAIAPI = "<b>OpenAI API: </b>不可用 🚫"
+    }, err => {
+      result.OpenAIAPI = "<b>OpenAI API: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -321,10 +317,10 @@ function testOpenAIAPI() {
 
 function testGemini() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: GEMINI_WEB_URL,
       opts: opts_noRedirect,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.web,
       headers: {
         'User-Agent': UA,
         'Accept-Language': 'en-US,en;q=0.9'
@@ -354,8 +350,8 @@ function testGemini() {
         result.Gemini = "<b>Gemini: </b>异常 (" + s + ") ❗️"
       }
       resolve()
-    }, () => {
-      result.Gemini = "<b>Gemini: </b>检测超时 🚦"
+    }, err => {
+      result.Gemini = "<b>Gemini: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -365,10 +361,10 @@ function testGemini() {
 
 function testGeminiAPI() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: GEMINI_API_URL,
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.api,
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
@@ -389,8 +385,8 @@ function testGeminiAPI() {
         result.GeminiAPI = "<b>Gemini API: </b>异常 (" + s + ") ❗️"
       }
       resolve()
-    }, () => {
-      result.GeminiAPI = "<b>Gemini API: </b>不可用 🚫"
+    }, err => {
+      result.GeminiAPI = "<b>Gemini API: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -401,60 +397,47 @@ function testGeminiAPI() {
 // 命中特征: 跳转/返回 google.cn、页面语言锁定 zh-CN、触发 /sorry 人机验证
 
 function testGoogleCN() {
-  return new Promise((resolve) => {
-    $task.fetch({
-      url: GOOGLE_URL,
-      opts: opts_noRedirect,
-      timeout: TIMEOUT,
-      headers: {
-        'User-Agent': UA,
-        // 不带 Accept-Language，让 Google 按 IP 地理位置自行判断语言/域名
+  return (async () => {
+    let request = { opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } }
+    let resp
+    try {
+      // generate_204 不下载首页，能显著降低慢链路上的失败率。
+      resp = await fetchWithRetry(Object.assign({ url: GOOGLE_NOSSL_URL }, request))
+    } catch (firstError) {
+      try {
+        // 轻量端点被运营商拦截时再回退到首页，以便读取重定向/验证码特征。
+        resp = await fetchWithRetry(Object.assign({ url: GOOGLE_URL }, request))
+      } catch (secondError) {
+        result.GoogleCN = "<b>Google 送中: </b>" + networkErrorLabel(secondError)
+        return
       }
-    }).then(resp => {
-      let s = resp.statusCode
-      let body = (resp.body || '').toLowerCase()
-      let loc = (resp.headers['Location'] || resp.headers['location'] || '').toLowerCase()
+    }
 
-      let hitCN = false
-      let reason = ''
-
-      if (loc.indexOf('google.cn') !== -1) {
-        hitCN = true
-        reason = '跳转至 google.cn'
-      } else if (loc.indexOf('/sorry/') !== -1 || body.indexOf('/sorry/index') !== -1) {
-        hitCN = true
-        reason = '触发人机验证'
-      } else if (body.indexOf('lang="zh-cn"') !== -1 || body.indexOf("lang='zh-cn'") !== -1) {
-        hitCN = true
-        reason = '强制简体页面'
-      } else if (body.indexOf('百度') !== -1 && body.indexOf('google') === -1) {
-        hitCN = true
-        reason = '疑似 DNS 污染'
-      }
-
-      if (hitCN) {
-        result.GoogleCN = "<b>Google 送中: </b>是 (" + reason + ") 🇨🇳⚠️"
-      } else if (s >= 200 && s < 400) {
-        result.GoogleCN = "<b>Google 送中: </b>否 ✅"
-      } else {
-        result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
-      }
-      resolve()
-    }, () => {
-      result.GoogleCN = "<b>Google 送中: </b>检测超时 🚦"
-      resolve()
-    })
-  })
+    let s = resp.statusCode
+    let body = (resp.body || '').toLowerCase()
+    let loc = (resp.headers['Location'] || resp.headers['location'] || '').toLowerCase()
+    if (loc.indexOf('google.cn') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>是 (跳转至 google.cn) 🇨🇳⚠️"
+    } else if (loc.indexOf('/sorry/') !== -1 || body.indexOf('/sorry/') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>是 (触发人机验证) 🇨🇳⚠️"
+    } else if (body.indexOf('lang=\"zh-cn\"') !== -1 || body.indexOf("lang='zh-cn'") !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>是 (强制简体页面) 🇨🇳⚠️"
+    } else if (s === 204 || (s >= 200 && s < 400)) {
+      result.GoogleCN = "<b>Google 送中: </b>否 ✅"
+    } else {
+      result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
+    }
+  })()
 }
 
 // ===================== 检测: Netflix =====================
 
 function testNetflix() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: NETFLIX_URL,
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.streaming,
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
@@ -476,8 +459,8 @@ function testNetflix() {
         result.Netflix = "<b>Netflix: </b>异常 (" + s + ") ❗️"
       }
       resolve()
-    }, () => {
-      result.Netflix = "<b>Netflix: </b>检测超时 🚦"
+    }, err => {
+      result.Netflix = "<b>Netflix: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -487,37 +470,39 @@ function testNetflix() {
 
 function testYouTube() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: YOUTUBE_URL,
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.streaming,
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
-      let body = resp.body || ''
+      let body = (resp.body || '').toLowerCase()
 
-      if (s !== 200) {
-        result.YouTube = "<b>YouTube Premium: </b>检测失败 ❗️"
+      if (s < 200 || s >= 400) {
+        result.YouTube = "<b>YouTube Premium: </b>异常 (" + s + ") ❗️"
         resolve()
         return
       }
 
-      if (body.indexOf('Premium is not available in your country') !== -1) {
+      if (body.indexOf('premium is not available in your country') !== -1 ||
+          body.indexOf('youtube premium is not available') !== -1 ||
+          body.indexOf('not available in your region') !== -1) {
         result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
       } else {
         let region = 'US'
-        let re = /"GL":"(.*?)"/gm
+        let re = /"gl":"(.*?)"/gm
         let ret = re.exec(body)
         if (ret && ret.length === 2) {
           region = ret[1]
-        } else if (body.indexOf('www.google.cn') !== -1) {
+        } else if (body.indexOf('www.google.cn') !== -1 || body.indexOf('youtube.cn') !== -1) {
           region = 'CN'
         }
         result.YouTube = "<b>YouTube Premium: </b>支持 " + arrow + "⟦" + flag(region) + "⟧ 🎉"
       }
       resolve()
-    }, () => {
-      result.YouTube = "<b>YouTube Premium: </b>检测超时 🚦"
+    }, err => {
+      result.YouTube = "<b>YouTube Premium: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
@@ -527,11 +512,11 @@ function testYouTube() {
 
 function testDisneyPlus() {
   return new Promise((resolve) => {
-    $task.fetch({
+    fetchWithRetry({
       url: DISNEY_API_URL,
       method: 'POST',
       opts: opts,
-      timeout: TIMEOUT,
+      timeout: TIMEOUTS.streaming,
       headers: {
         'Accept-Language': 'en',
         'Authorization': DISNEY_TOKEN,
@@ -559,6 +544,11 @@ function testDisneyPlus() {
         }
       })
     }).then(resp => {
+      if (resp.statusCode === 401 || resp.statusCode === 403) {
+        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
+        resolve()
+        return
+      }
       if (resp.statusCode !== 200) {
         result.Disney = "<b>Disneyᐩ: </b>未支持 🚫"
         resolve()
@@ -588,8 +578,8 @@ function testDisneyPlus() {
         result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
       }
       resolve()
-    }, () => {
-      result.Disney = "<b>Disneyᐩ: </b>检测超时 🚦"
+    }, err => {
+      result.Disney = "<b>Disneyᐩ: </b>" + networkErrorLabel(err)
       resolve()
     })
   })
