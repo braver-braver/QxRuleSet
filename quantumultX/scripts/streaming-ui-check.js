@@ -1,13 +1,13 @@
 /***
- * 服务解锁检测 v3.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-07-03
+ * 更新: 2026-09-07
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
- * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（强制简体/触发人机验证）
+ * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（大陆重定向/强制简体）
  * ○ 流媒体:   Netflix / YouTube Premium / Disney+
  *
  * For Quantumult-X 598+ ONLY!!
@@ -124,22 +124,91 @@ function regionFromTrace(body) {
 
 function flag(region) {
   if (!region) return '❓'
-  return flags.get(region.toUpperCase()) || region
+  let code = String(region).toUpperCase()
+  if (!/^[A-Z]{2}$/.test(code)) return '❓'
+  return flags.get(code) || code
+}
+
+function getHeader(headers, name) {
+  let target = name.toLowerCase()
+  let source = headers || {}
+  let keys = Object.keys(source)
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase() === target) return String(source[keys[i]] || '')
+  }
+  return ''
+}
+
+function hasStructuredRegionBlock(body) {
+  let text = (body || '').toLowerCase()
+  return /"unsupported_(?:country|region)"\s*:\s*true/.test(text) ||
+    /"(?:code|reason)"\s*:\s*"unsupported_(?:country|region)[^"]*"/.test(text)
+}
+
+function hasExplicitRegionMessage(body) {
+  let text = (body || '').toLowerCase()
+  return text.indexOf('country not supported') !== -1 ||
+    text.indexOf('not available in your country') !== -1 ||
+    text.indexOf('not available in your region') !== -1 ||
+    text.indexOf('service is not available in your territory') !== -1
+}
+
+function hasApiRegionBlock(body) {
+  let text = (body || '').toLowerCase()
+  return hasStructuredRegionBlock(text) ||
+    hasExplicitRegionMessage(text) ||
+    /(?:user )?location[^.]{0,40}(?:not supported|unsupported)/.test(text)
+}
+
+function isBotChallenge(resp, body) {
+  let text = (body || '').toLowerCase()
+  return getHeader(resp && resp.headers, 'cf-mitigated').toLowerCase() === 'challenge' ||
+    text.indexOf('challenge-platform') !== -1 ||
+    text.indexOf('cf-chl-') !== -1 ||
+    text.indexOf('checking your browser') !== -1 ||
+    text.indexOf('verify you are human') !== -1
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 // Quantumult X 只会在网络层失败时 reject；HTTP 错误仍然会 resolve。
 // 重试只针对可恢复的网络失败，避免对明确的 4xx/5xx 重复请求。
+// 超时在脚本层实现，避免依赖 Quantumult X 未公开的单请求 timeout 行为。
 function fetchWithRetry(request) {
   return new Promise((resolve, reject) => {
     let attempt = 0
     let run = () => {
       attempt++
-      $task.fetch(request).then(resolve, err => {
+      let settled = false
+      let timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        retryOrReject(new Error('timeout'))
+      }, request.timeout)
+      let retryOrReject = err => {
         if (attempt < MAX_ATTEMPTS) {
           setTimeout(run, RETRY_DELAY * attempt)
         } else {
           reject(err)
         }
+      }
+      $task.fetch(request).then(response => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(response)
+      }, err => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        retryOrReject(err)
       })
     }
     run()
@@ -190,12 +259,15 @@ function testClaude() {
       let body = (resp.body || '').toLowerCase()
       // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
       // “unavailable/restricted” 可能来自打包脚本，不能单独作为判据。
-      let structuredBlock = body.indexOf('"unsupported_region":true') !== -1 ||
-        body.indexOf('"unsupported_region": true') !== -1
       let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
-      let deniedTitle = titleMatch && /access denied|country not supported|not available in your country/.test(titleMatch[1])
-      if (s === 403 || s === 451 || structuredBlock || deniedTitle) {
+      let deniedTitle = titleMatch && /country not supported|not available in your country/.test(titleMatch[1])
+      let accessDeniedTitle = titleMatch && /access denied/.test(titleMatch[1])
+      if (isBotChallenge(resp, body)) {
+        result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
+      } else if (s === 403 || accessDeniedTitle) {
+        result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
       } else if (s >= 200 && s < 400) {
         result.Claude = "<b>Claude: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
       } else {
@@ -236,12 +308,10 @@ function testClaudeAPI() {
       // 529 = overloaded          → API 可达
       if (s === 401 || s === 400 || s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>可用 🎉"
+      } else if (s === 403 && hasApiRegionBlock(body)) {
+        result.ClaudeAPI = "<b>Claude API: </b>受限 🚫"
       } else if (s === 403) {
-        if (body.indexOf('region') !== -1 || body.indexOf('country') !== -1 || body.indexOf('geo') !== -1) {
-          result.ClaudeAPI = "<b>Claude API: </b>受限 🚫"
-        } else {
-          result.ClaudeAPI = "<b>Claude API: </b>可用 🎉"
-        }
+        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403) ⚠️"
       } else {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
       }
@@ -261,11 +331,16 @@ function testChatGPT() {
     let f = flag(region)
     try {
       let resp = await fetchWithRetry({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
-      let respStr = JSON.stringify(resp)
       let s = resp.statusCode
-      let isBlocked = respStr.indexOf('text/plain') !== -1
-      if (isBlocked || s === 403 || s === 451) {
+      let body = (resp.body || '').toLowerCase()
+      let contentType = getHeader(resp.headers, 'content-type').toLowerCase()
+      if (isBotChallenge(resp, body)) {
+        result.ChatGPT = "<b>ChatGPT: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (s === 451 || hasStructuredRegionBlock(body) ||
+          ((s === 403 || contentType.indexOf('text/plain') !== -1) && hasExplicitRegionMessage(body))) {
         result.ChatGPT = "<b>ChatGPT: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
+      } else if (s === 403) {
+        result.ChatGPT = "<b>ChatGPT: </b>访问受限 (403) ⚠️"
       } else if (s >= 200 && s < 400) {
         result.ChatGPT = "<b>ChatGPT: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
       } else {
@@ -296,12 +371,10 @@ function testOpenAIAPI() {
       // 401 = invalid_api_key → API 可达
       if (s === 401 || s === 429) {
         result.OpenAIAPI = "<b>OpenAI API: </b>可用 🎉"
+      } else if (s === 403 && hasApiRegionBlock(body)) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>受限 🚫"
       } else if (s === 403) {
-        if (body.indexOf('country') !== -1 || body.indexOf('region') !== -1) {
-          result.OpenAIAPI = "<b>OpenAI API: </b>受限 🚫"
-        } else {
-          result.OpenAIAPI = "<b>OpenAI API: </b>可用 🎉"
-        }
+        result.OpenAIAPI = "<b>OpenAI API: </b>访问受限 (403) ⚠️"
       } else {
         result.OpenAIAPI = "<b>OpenAI API: </b>异常 (" + s + ") ❗️"
       }
@@ -329,23 +402,22 @@ function testGemini() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      if (s === 302 || s === 301) {
+      if (s === 302 || s === 301 || s === 307 || s === 308) {
         // 未登录状态下 Gemini 通常会重定向到 accounts.google.com，属正常
-        let loc = (resp.headers['Location'] || resp.headers['location'] || '').toLowerCase()
-        if (loc.indexOf('accounts.google.com') !== -1 || loc.indexOf('gemini.google.com') !== -1) {
+        let loc = getHeader(resp.headers, 'location').toLowerCase()
+        if (loc.indexOf('accounts.google.com') !== -1 ||
+            loc.indexOf('gemini.google.com') !== -1 ||
+            loc.indexOf('consent.google.com') !== -1) {
           result.Gemini = "<b>Gemini: </b>支持 🎉"
         } else {
-          result.Gemini = "<b>Gemini: </b>未支持 🚫"
+          result.Gemini = "<b>Gemini: </b>重定向异常 ⚠️"
         }
-      } else if (s === 403 || s === 451) {
+      } else if (s === 451 || hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)) {
         result.Gemini = "<b>Gemini: </b>未支持 🚫"
+      } else if (s === 403) {
+        result.Gemini = "<b>Gemini: </b>访问受限 (403) ⚠️"
       } else if (s >= 200 && s < 400) {
-        if (body.indexOf('is not available in your country') !== -1 ||
-            body.indexOf('not available in your region') !== -1) {
-          result.Gemini = "<b>Gemini: </b>未支持 🚫"
-        } else {
-          result.Gemini = "<b>Gemini: </b>支持 🎉"
-        }
+        result.Gemini = "<b>Gemini: </b>支持 🎉"
       } else {
         result.Gemini = "<b>Gemini: </b>异常 (" + s + ") ❗️"
       }
@@ -373,12 +445,10 @@ function testGeminiAPI() {
       // 400 = API_KEY_INVALID → 服务可达，仅密钥无效
       if (s === 400 || s === 401) {
         result.GeminiAPI = "<b>Gemini API: </b>可用 🎉"
+      } else if (s === 403 && hasApiRegionBlock(body)) {
+        result.GeminiAPI = "<b>Gemini API: </b>受限 🚫"
       } else if (s === 403) {
-        if (body.indexOf('location') !== -1 || body.indexOf('country') !== -1 || body.indexOf('region') !== -1) {
-          result.GeminiAPI = "<b>Gemini API: </b>受限 🚫"
-        } else {
-          result.GeminiAPI = "<b>Gemini API: </b>可用 🎉"
-        }
+        result.GeminiAPI = "<b>Gemini API: </b>访问受限 (403) ⚠️"
       } else if (s === 200) {
         result.GeminiAPI = "<b>Gemini API: </b>可用 🎉"
       } else {
@@ -394,19 +464,26 @@ function testGeminiAPI() {
 
 // ===================== 检测: Google 送中 =====================
 // 判断节点出口 IP 是否被 Google 判定为中国大陆网络。
-// 命中特征: 跳转/返回 google.cn、页面语言锁定 zh-CN、触发 /sorry 人机验证
+// 命中特征: 大陆重定向或主页语言锁定 zh-CN；验证码本身不再视为大陆证据。
 
 function testGoogleCN() {
   return (async () => {
-    let request = { opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } }
+    let request = {
+      opts: opts_noRedirect,
+      timeout: TIMEOUTS.web,
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
+    }
     let resp
     try {
-      // generate_204 不下载首页，能显著降低慢链路上的失败率。
-      resp = await fetchWithRetry(Object.assign({ url: GOOGLE_NOSSL_URL }, request))
+      // 主页响应才能提供地区跳转和页面语言；204 只能作为连通性回退。
+      resp = await fetchWithRetry(Object.assign({ url: GOOGLE_URL }, request))
     } catch (firstError) {
       try {
-        // 轻量端点被运营商拦截时再回退到首页，以便读取重定向/验证码特征。
-        resp = await fetchWithRetry(Object.assign({ url: GOOGLE_URL }, request))
+        resp = await fetchWithRetry(Object.assign({ url: GOOGLE_NOSSL_URL }, request))
+        if (resp.statusCode === 204) {
+          result.GoogleCN = "<b>Google 送中: </b>无法判定 (仅连通) ⚠️"
+          return
+        }
       } catch (secondError) {
         result.GoogleCN = "<b>Google 送中: </b>" + networkErrorLabel(secondError)
         return
@@ -415,14 +492,22 @@ function testGoogleCN() {
 
     let s = resp.statusCode
     let body = (resp.body || '').toLowerCase()
-    let loc = (resp.headers['Location'] || resp.headers['location'] || '').toLowerCase()
-    if (loc.indexOf('google.cn') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>是 (跳转至 google.cn) 🇨🇳⚠️"
+    let loc = getHeader(resp.headers, 'location').toLowerCase()
+    if (loc.indexOf('google.cn') !== -1 ||
+        loc.indexOf('google.com.cn') !== -1 ||
+        loc.indexOf('google.com.hk') !== -1 ||
+        loc.indexOf('hkredirect') !== -1 ||
+        loc.indexOf('hl=zh-cn') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>是 (大陆重定向) 🇨🇳⚠️"
+    } else if (loc.indexOf('consent.google.') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (同意页) ⚠️"
     } else if (loc.indexOf('/sorry/') !== -1 || body.indexOf('/sorry/') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>是 (触发人机验证) 🇨🇳⚠️"
-    } else if (body.indexOf('lang=\"zh-cn\"') !== -1 || body.indexOf("lang='zh-cn'") !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (触发人机验证) ⚠️"
+    } else if (/<html[^>]+lang=["']zh-cn["']/.test(body)) {
       result.GoogleCN = "<b>Google 送中: </b>是 (强制简体页面) 🇨🇳⚠️"
-    } else if (s === 204 || (s >= 200 && s < 400)) {
+    } else if (s >= 300 && s < 400) {
+      result.GoogleCN = "<b>Google 送中: </b>重定向异常 ⚠️"
+    } else if (s === 204 || (s >= 200 && s < 300)) {
       result.GoogleCN = "<b>Google 送中: </b>否 ✅"
     } else {
       result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
@@ -443,11 +528,13 @@ function testNetflix() {
       let s = resp.statusCode
       if (s === 404) {
         result.Netflix = "<b>Netflix: </b>仅自制剧 ⚠️"
+      } else if (s === 403 && isBotChallenge(resp, resp.body)) {
+        result.Netflix = "<b>Netflix: </b>验证拦截 ⚠️"
       } else if (s === 403) {
         result.Netflix = "<b>Netflix: </b>未支持 🚫"
       } else if (s === 200) {
-        let url = resp.headers['X-Originating-URL'] || ''
-        let region = 'US'
+        let url = getHeader(resp.headers, 'x-originating-url')
+        let region = ''
         if (url) {
           let parts = url.split('/')
           if (parts[3] && parts[3] !== 'title') {
@@ -490,8 +577,8 @@ function testYouTube() {
           body.indexOf('not available in your region') !== -1) {
         result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
       } else {
-        let region = 'US'
-        let re = /"gl":"(.*?)"/gm
+        let region = ''
+        let re = /"(?:gl|innertube_context_gl)":"([a-z]{2})"/
         let ret = re.exec(body)
         if (ret && ret.length === 2) {
           region = ret[1]
@@ -544,8 +631,24 @@ function testDisneyPlus() {
         }
       })
     }).then(resp => {
-      if (resp.statusCode === 401 || resp.statusCode === 403) {
+      let body = (resp.body || '').toLowerCase()
+      if (resp.statusCode === 401) {
         result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
+        resolve()
+        return
+      }
+      if (resp.statusCode === 403 && hasApiRegionBlock(body)) {
+        result.Disney = "<b>Disneyᐩ: </b>未支持 🚫"
+        resolve()
+        return
+      }
+      if (resp.statusCode === 403 && /token|unauthorized|invalid credential/.test(body)) {
+        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
+        resolve()
+        return
+      }
+      if (resp.statusCode === 403) {
+        result.Disney = "<b>Disneyᐩ: </b>访问受限 (403) ⚠️"
         resolve()
         return
       }
@@ -571,8 +674,10 @@ function testDisneyPlus() {
 
         if (inSupported === false || inSupported === 'false') {
           result.Disney = "<b>Disneyᐩ: </b>即将登陆" + arrow + "⟦" + f + "⟧ ⚠️"
-        } else {
+        } else if (inSupported === true || inSupported === 'true') {
           result.Disney = "<b>Disneyᐩ: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
+        } else {
+          result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
         }
       } catch (e) {
         result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
@@ -588,7 +693,7 @@ function testDisneyPlus() {
 // ===================== 输出构建 =====================
 
 function buildOutput(policyInfo) {
-  let nodeLabel = policyInfo || $environment.params
+  let nodeLabel = escapeHtml(policyInfo || $environment.params)
 
   // AI 服务板块
   let aiItems  = [
@@ -649,12 +754,8 @@ const message = {
   try {
     let resolve = await $configuration.sendMessage(message)
     if (resolve.ret) {
-      let output = JSON.stringify(resolve.ret[message.content])
-      if (output) {
-        output = output.replace(/\"|\[|\]/g, "").replace(/\,/g, arrow)
-      } else {
-        output = $environment.params
-      }
+      let path = resolve.ret[message.content]
+      let output = Array.isArray(path) ? path.join(arrow) : (path || $environment.params)
       $done({ title: result.title, htmlMessage: buildOutput(output) })
     } else {
       $done({ title: result.title, htmlMessage: buildOutput(null) })
@@ -668,6 +769,6 @@ const message = {
   console.log(">>> 脚本全局异常: " + e)
   $done({
     title: '🔍 服务解锁查询',
-    htmlMessage: '<p style="text-align:center">脚本执行出错: ' + e + '</p>'
+    htmlMessage: '<p style="text-align:center">脚本执行出错: ' + escapeHtml(e) + '</p>'
   })
 })
