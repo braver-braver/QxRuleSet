@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.1 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.1.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-09-07
+ * 更新: 2026-09-24
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（大陆重定向/强制简体）
@@ -13,7 +13,7 @@
  * For Quantumult-X 598+ ONLY!!
  *
  * [task_local]
- * event-interaction https://raw.githubusercontent.com/你的用户名/仓库/master/streaming-ui-check.js, tag=服务解锁查询, img-url=checkmark.seal.system, enabled=true
+ * event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs/heads/main/quantumultX/scripts/streaming-ui-check.js, tag=服务解锁查询, img-url=checkmark.seal.system, enabled=true
  *
  * @KOP-XIAO (original) | Refactored 2026-07
  ***/
