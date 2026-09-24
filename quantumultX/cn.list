@@ -1,10 +1,11 @@
-## 一些容易误判的境内域名
-## version: 0.1.0
+## 个人直连覆盖规则
+## version: 0.2.0
+## 由 qx-macos.conf 以 force-policy=direct 加载；请勿在此文件加入 proxy/reject 规则。
 
 HOST,chende.ren,direct
 HOST,go-zero.dev,direct
 HOST,limestart.cn,direct
-HOST,hf-mirror.com,direct 
+HOST,hf-mirror.com,direct
 HOST,my.yushe.org,direct
 HOST,rustdesk.com,direct
 HOST,answer.ai,direct
@@ -41,4 +42,3 @@ HOST-SUFFIX,sharedchat.cc,direct
 HOST-SUFFIX,freemodel.dev,direct
 HOST-SUFFIX,appstorrent.ru,direct
 
-HOST-SUFFIX,tabbit.ai,proxy
