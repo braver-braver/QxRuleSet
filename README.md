@@ -1,6 +1,30 @@
 # QxRuleSet
-## ruleset whitelist self-used
-解决一些个人博客以及技术开源文档站错误分流的问题。
-- QX quantumultX for mac
-- homeproxy router
-- clash verge clash verge 2.4x
+
+## Repository
+
+```text
+QxRuleSet/
+├── docs/
+│   ├── homeproxy.md
+│   ├── maintenance.md
+│   └── quantumultx/
+│       ├── configuration.md
+│       ├── rules.md
+│       └── streaming-ui-check.md
+├── homeproxy/
+│   ├── customip.json
+│   └── customsite.json
+└── quantumultX/
+    ├── cn.list
+    ├── qx-macos.conf
+    └── scripts/
+        └── streaming-ui-check.js
+```
+
+## Documentation
+
+- [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [Quantumult X 规则维护](docs/quantumultx/rules.md)
+- [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
+- [HomeProxy](docs/homeproxy.md)
+- [维护约定](docs/maintenance.md)
