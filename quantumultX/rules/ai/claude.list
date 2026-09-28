@@ -1,0 +1,21 @@
+## Claude / Anthropic
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=ClaudeAi服务.
+
+# Core Claude / Anthropic
+HOST-SUFFIX,anthropic.com,ClaudeAi服务
+HOST-SUFFIX,claude.ai,ClaudeAi服务
+HOST-SUFFIX,claude.com,ClaudeAi服务
+HOST-SUFFIX,clau.de,ClaudeAi服务
+
+# Claude generated/user content and MCP
+HOST-SUFFIX,claudeusercontent.com,ClaudeAi服务
+HOST-SUFFIX,claudemcpclient.com,ClaudeAi服务
+HOST-SUFFIX,claudemcpcontent.com,ClaudeAi服务
+
+# Authentication / website dependencies
+HOST,anthropic.auth0.com,ClaudeAi服务
+HOST,anthropic-com.ghost.io,ClaudeAi服务
+HOST,anthropic.com.cdn.cloudflare.net,ClaudeAi服务
+HOST,servd-anthropic-website.b-cdn.net,ClaudeAi服务
