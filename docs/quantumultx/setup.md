@@ -106,7 +106,7 @@ p12 = YOUR_BASE64_P12
 hostname = YOUR_MITM_HOSTNAMES
 ```
 
-如果当前只使用分流规则、策略组和 event-interaction，不需要 MITM，可以保持注释状态。
+默认模板已经把 HTTPS Rewrite 资源设为 `enabled=false`。因此只使用分流规则、策略组、广告 filter 和 event-interaction 时，不需要 MITM，可以保持整个 `[mitm]` 用户区为注释状态。
 
 ## 3. 导入 Quantumult X
 
@@ -165,3 +165,17 @@ quantumultX/quantumultX.conf
 - Cookie
 - API Key
 - 个人设备专用凭据
+
+
+## 外部依赖
+
+基础可用性不依赖第三方 service ruleset；核心服务分流由本仓库维护。
+
+仍保留的上游资源主要是：
+
+- 订阅资源解析器
+- 广告过滤数据源
+- 手工诊断脚本
+- UI 图标
+
+具体分类和维护原则见 [外部依赖策略](dependencies.md)。
