@@ -1,0 +1,34 @@
+## OpenAI / ChatGPT
+## version: 0.2.0
+## updated: 2026-09-28
+## Loaded with force-policy=OpenAi服务.
+
+# Core OpenAI / ChatGPT
+HOST-SUFFIX,chatgpt.com,OpenAi服务
+HOST-SUFFIX,openai.com,OpenAi服务
+HOST-SUFFIX,oaistatic.com,OpenAi服务
+HOST-SUFFIX,oaiusercontent.com,OpenAi服务
+HOST-SUFFIX,oaistatsig.com,OpenAi服务
+HOST-SUFFIX,openaimerge.com,OpenAi服务
+
+# Authentication / workspace
+HOST-SUFFIX,workos.com,OpenAi服务
+HOST-SUFFIX,workoscdn.com,OpenAi服务
+
+# Support / telemetry / challenge endpoints used by ChatGPT
+HOST,ct.sendgrid.net,OpenAi服务
+HOST-SUFFIX,intercom.io,OpenAi服务
+HOST-SUFFIX,intercomcdn.com,OpenAi服务
+HOST,challenges.cloudflare.com,OpenAi服务
+HOST,js.stripe.com,OpenAi服务
+HOST,o207216.ingest.sentry.io,OpenAi服务
+HOST,o33249.ingest.sentry.io,OpenAi服务
+HOST,rum.browser-intake-datadoghq.com,OpenAi服务
+
+# Legacy compatibility retained from older clients / dependencies
+HOST,api.statsig.com,OpenAi服务
+HOST-SUFFIX,chatgpt.livekit.cloud,OpenAi服务
+HOST,client-api.arkoselabs.com,OpenAi服务
+HOST-SUFFIX,events.statsigapi.net,OpenAi服务
+HOST-SUFFIX,featuregates.org,OpenAi服务
+HOST-SUFFIX,turn.livekit.cloud,OpenAi服务

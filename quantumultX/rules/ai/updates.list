@@ -1,0 +1,12 @@
+## AI desktop application updates
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=AI应用更新.
+## Keep this list narrow: download/update endpoints only.
+
+# ChatGPT / Codex Desktop Sparkle appcast and packages
+HOST,persistent.oaistatic.com,AI应用更新
+
+# Claude Desktop packages / CDN
+HOST,downloads.claude.ai,AI应用更新
+HOST,a-cdn.anthropic.com,AI应用更新
