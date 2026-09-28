@@ -52,6 +52,8 @@ final, proxy
 
 OpenAI、Claude、Gemini 及 AI 桌面客户端更新规则由本仓库的 `quantumultX/rules/ai/` 独立维护，主配置只负责引用和绑定策略。详见 [AI 分流规则集](ai-rules.md)。
 
+Spotify、社交媒体、Google、GitHub 规则由 `quantumultX/rules/services/` 独立维护。详见 [通用服务分流规则集](service-rules.md)。
+
 如果远程规则文件内的策略名不应直接采用，应显式使用：
 
 ```text
