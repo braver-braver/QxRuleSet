@@ -12,6 +12,7 @@ QxRuleSet/
 │       ├── configuration.md
 │       ├── openai.md
 │       ├── rules.md
+│       ├── service-rules.md
 │       └── streaming-ui-check.md
 ├── homeproxy/
 │   ├── customip.json
@@ -20,11 +21,16 @@ QxRuleSet/
     ├── cn.list
     ├── qx-macos.conf
     ├── rules/
-    │   └── ai/
-    │       ├── claude.list
-    │       ├── gemini.list
-    │       ├── openai.list
-    │       └── updates.list
+    │   ├── ai/
+    │   │   ├── claude.list
+    │   │   ├── gemini.list
+    │   │   ├── openai.list
+    │   │   └── updates.list
+    │   └── services/
+    │       ├── github.list
+    │       ├── google.list
+    │       ├── social.list
+    │       └── spotify.list
     └── scripts/
         └── streaming-ui-check.js
 ```
@@ -34,6 +40,7 @@ QxRuleSet/
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
+- [通用服务分流规则集](docs/quantumultx/service-rules.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
 - [HomeProxy](docs/homeproxy.md)
