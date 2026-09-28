@@ -81,6 +81,10 @@ Google 通用服务
 
 这样 `gemini.google.com` / Gemini API 会先匹配 AI ruleset，而 YouTube 的专属域名和 API 也可以优先进入 `油管服务`。
 
+Google ruleset 额外维护地区 Google Search 域名（例如 `google.co.uk`、`google.co.jp`、`google.de` 等），避免这些请求落到 `final, proxy` 而绕过 `谷歌服务`。
+
+YouTube Data API 的 `youtube.googleapis.com` 明确维护在 `youtube.list`，因此会在通用 `googleapis.com` 规则之前进入 `油管服务`。
+
 Google ruleset 不维护 Google IP 段，避免共享 Google 网络地址把 YouTube、Gemini 或其他 Google 产品错误吸入同一策略。
 
 ## GitHub
