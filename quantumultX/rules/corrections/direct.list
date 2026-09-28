@@ -1,0 +1,61 @@
+## Conservative direct-routing corrections
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=direct.
+## Keep this list conservative. Do not place Apple, AI, Google, GitHub,
+## shared SaaS/CDN infrastructure, or ad-blocking rules here.
+
+# Baidu
+HOST,sp0.baidu.com,direct
+HOST-SUFFIX,baidustatic.com,direct
+
+# Kuaishou
+HOST-SUFFIX,e.kuaishou.com,direct
+HOST-SUFFIX,kuaishou.com,direct
+HOST-SUFFIX,yximgs.com,direct
+HOST-SUFFIX,ksapisrv.com,direct
+
+# Tencent / QQ
+HOST-SUFFIX,iwx.mail.qq.com,direct
+HOST,ctc.qzs.qzone.qq.com,direct
+
+# WPS
+HOST-SUFFIX,dl.op.wpscdn.cn,direct
+HOST,mo.res.wpscdn.cn,direct
+
+# Travel / local services
+HOST-SUFFIX,17u.cn,direct
+HOST-SUFFIX,40017.cn,direct
+HOST,short-video.kakamobi.cn,direct
+HOST-SUFFIX,apoll.m.taobao.com,direct
+HOST-SUFFIX,acs.m.taobao.com,direct
+HOST-SUFFIX,tophub.app,direct
+HOST,aw-s.tripcdn.com,direct
+HOST-SUFFIX,trip.com,direct
+
+# China Mobile login
+HOST,www.cmpassport.com,direct
+HOST,verify.cmpassport.com,direct
+HOST,rcs.cmpassport.com,direct
+
+# Xiaomi / Sogou
+HOST,app.chat.xiaomi.net,direct
+HOST,get.sogou.com,direct
+HOST,a.stat.xiaomi.com,direct
+
+# ByteDance
+HOST-SUFFIX,snssdk.com,direct
+HOST-SUFFIX,bytedance.com,direct
+HOST-SUFFIX,byteimg.com,direct
+
+# NetEase
+HOST,api.iplay.163.com,direct
+HOST,ac.dun.163yun.com,direct
+HOST,count.mail.163.com,direct
+
+# Alipay / JD / Meituan
+HOST,amdc.alipay.com,direct
+HOST,gia.jd.com,direct
+HOST,img-x.jd.com,direct
+HOST,policy.jd.com,direct
+HOST-SUFFIX,d.meituan.net,direct
