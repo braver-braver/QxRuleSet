@@ -52,3 +52,20 @@ persistent.oaistatic.com
 - Gemini：Google 官方 Gemini / Gemini API 端点 + 已验证的 Gemini 专属规则
 
 第三方 ruleset 可以作为发现新域名的参考，但不再作为这三类 AI 服务的直接运行时依赖。
+
+
+## AI 安全节点
+
+AI ruleset 只负责“哪些域名属于哪个 provider”。
+
+实际节点选择由三层安全 policy 承担：
+
+```text
+OpenAi服务 → 🤖 OpenAI安全节点
+ClaudeAi服务 → 🧠 Claude安全节点
+Gemini → ✨ Gemini安全节点
+```
+
+这些策略由 [AI 安全节点筛选](ai-node-sifter.md) 自动维护。
+
+安全池首次导入默认选择 `reject`。更新节点订阅后需要至少手动执行一次对应的安全节点任务。
