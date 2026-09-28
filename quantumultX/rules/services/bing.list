@@ -1,0 +1,15 @@
+## Bing
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=Bing服务.
+## Must be loaded before microsoft.list.
+
+HOST-SUFFIX,bing.com,Bing服务
+HOST-SUFFIX,bing.com.cn,Bing服务
+HOST-SUFFIX,bing.net,Bing服务
+HOST-SUFFIX,bingads.com,Bing服务
+HOST-SUFFIX,bingapis.com,Bing服务
+HOST-SUFFIX,bingapistatistics.com,Bing服务
+HOST-SUFFIX,bingsandbox.com,Bing服务
+HOST-SUFFIX,bingvisualsearch.com,Bing服务
+HOST-SUFFIX,bingworld.com,Bing服务
