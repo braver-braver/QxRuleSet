@@ -6,10 +6,16 @@
 
 ```text
 quantumultX/rules/services/
+├── apple.list
+├── appletv.list
+├── bilibili.list
+├── bing.list
 ├── github.list
 ├── google.list
+├── microsoft.list
 ├── social.list
-└── spotify.list
+├── spotify.list
+└── youtube.list
 ```
 
 ## 职责
@@ -20,6 +26,12 @@ quantumultX/rules/services/
 | `social.list` | `社交媒体` | X、Reddit、Meta、Discord、Telegram、Bluesky |
 | `google.list` | `谷歌服务` | Google Search、Gmail、Drive、API、静态资源与下载基础设施 |
 | `github.list` | `GitHub服务` | GitHub Web/API/Git、静态资源、release、GHCR、Copilot 及 npm 相关域名 |
+| `youtube.list` | `油管服务` | YouTube Web / API / video CDN |
+| `bing.list` | `Bing服务` | Bing Search 与相关服务 |
+| `microsoft.list` | `微软服务` | Microsoft 365 / Outlook / OneDrive / Azure / Windows |
+| `appletv.list` | `AppleTV服务` | Apple TV 视频服务 |
+| `apple.list` | `苹果服务` | Apple / iCloud / App Store / Apple 基础服务 |
+| `bilibili.list` | `BiliBili` | Bilibili Web / App / 视频 CDN |
 
 这些 ruleset 由 `qx-macos.conf` 的 `[filter_remote]` 引用，并使用 `force-policy` 绑定到对应策略。
 
