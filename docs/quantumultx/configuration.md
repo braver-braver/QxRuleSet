@@ -125,3 +125,19 @@ quantumultX/quantumultX.conf
 - GitHub 域名已从 `dns_exclusion_list` 移除，使 GitHub 代理流量可以继续使用 Quantumult X 的远端解析机制。
 - iPhone 模板默认不设置 `udp_whitelist`，避免 VoIP、视频通话和游戏的高位 UDP 端口被误丢弃。
 - macOS 模板保留原有较保守的 UDP 白名单设置。
+
+
+## 外部资源边界
+
+核心 service routing 不再依赖第三方 ruleset。
+
+保留上游的资源主要是：
+
+- `resource_parser_url`
+- Adblock4limbo 广告数据源
+- 人工诊断脚本
+- 图标资源
+
+HTTPS Rewrite 默认关闭，因此基础使用不需要 MITM。
+
+完整说明见 [外部依赖策略](dependencies.md)。
