@@ -1,6 +1,6 @@
 # OpenAI / ChatGPT 分流与更新链路
 
-规则文件：[`quantumultX/openai.list`](../../quantumultX/openai.list)
+规则文件：[`quantumultX/rules/ai/openai.list`](../../quantumultX/rules/ai/openai.list)
 
 ## 维护策略
 
@@ -12,7 +12,7 @@ OpenAI / ChatGPT 的关键域名由本仓库维护，不再完全依赖第三方
 force-policy=OpenAi服务
 ```
 
-加载 `openai.list`。
+加载 `rules/ai/openai.list`。
 
 规则基线来自 OpenAI 官方网络建议，并保留少量旧规则用于兼容历史客户端或第三方依赖。
 
@@ -52,13 +52,7 @@ https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml
 
 获取 macOS 更新信息，安装包也由同一域名分发。
 
-因此 `qx-macos.conf` 在 `[filter_local]` 中显式配置：
-
-```text
-host, persistent.oaistatic.com, AI应用更新
-```
-
-使更新资源优先走 `AI应用更新` 策略。
+该域名维护在 [`rules/ai/updates.list`](../../quantumultX/rules/ai/updates.list) 中，并通过 `force-policy=AI应用更新` 优先绑定到更新策略。
 
 ### ChatGPT backend appcast
 
