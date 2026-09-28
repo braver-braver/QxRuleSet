@@ -36,21 +36,30 @@ iOS App 更新由 App Store / Apple 服务处理，因此没有必要让手机�
 
 不要直接把订阅地址或 MITM 私钥写进 Git 跟踪的模板。
 
-macOS 可以复制：
+建议统一生成实际使用文件：
+
+macOS：
 
 ```bash
-cp quantumultX/qx-macos.conf quantumultX/qx-macos.private.conf
+cp quantumultX/qx-macos.conf quantumultX/quantumultX.conf
 ```
 
-iPhone 配置可以复制为：
+iPhone / iOS：
+
+```bash
+cp quantumultX/qx-ios.conf quantumultX/quantumultX.conf
+```
+
+最终只编辑和导入：
 
 ```text
-quantumultX/qx-ios.private.conf
+quantumultX/quantumultX.conf
 ```
 
 `.gitignore` 已忽略：
 
 ```text
+quantumultX/quantumultX.conf
 quantumultX/*.private.conf
 quantumultX/private/
 ```
@@ -101,12 +110,13 @@ hostname = YOUR_MITM_HOSTNAMES
 
 ## 3. 导入 Quantumult X
 
-最终实际使用的是私有副本，例如：
+最终实际使用的是：
 
 ```text
-qx-macos.private.conf
-qx-ios.private.conf
+quantumultX/quantumultX.conf
 ```
+
+这个文件不会被 Git 跟踪，因此可以安全地加入订阅 URL、Token、P12 和 passphrase。
 
 导入后检查：
 
