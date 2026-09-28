@@ -100,3 +100,28 @@ rules/ai/updates.list
 ```
 
 iPhone 不加载该文件，应用更新交给 App Store / Apple 服务。
+
+
+## 标准运行文件
+
+仓库中的两份主配置是模板：
+
+- `qx-macos.conf`
+- `qx-ios.conf`
+
+实际使用时复制其中一份为：
+
+```text
+quantumultX/quantumultX.conf
+```
+
+该文件已加入 `.gitignore`，用于保存节点订阅、Token、MITM P12 和 passphrase。
+
+## 网络行为修正
+
+为了让策略真正可控：
+
+- `17.0.0.0/8` 已从 `excluded_routes` 移除，避免 Apple / Apple TV 流量绕过 Quantumult X。
+- GitHub 域名已从 `dns_exclusion_list` 移除，使 GitHub 代理流量可以继续使用 Quantumult X 的远端解析机制。
+- iPhone 模板默认不设置 `udp_whitelist`，避免 VoIP、视频通话和游戏的高位 UDP 端口被误丢弃。
+- macOS 模板保留原有较保守的 UDP 白名单设置。
