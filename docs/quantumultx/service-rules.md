@@ -15,6 +15,7 @@ quantumultX/rules/services/
 ├── microsoft.list
 ├── social.list
 ├── spotify.list
+├── wechat.list
 └── youtube.list
 ```
 
@@ -32,6 +33,7 @@ quantumultX/rules/services/
 | `appletv.list` | `AppleTV服务` | Apple TV 视频服务 |
 | `apple.list` | `苹果服务` | Apple / iCloud / App Store / Apple 基础服务 |
 | `bilibili.list` | `BiliBili` | Bilibili Web / App / 视频 CDN |
+| `wechat.list` | `direct` | WeChat / Weixin / 微信支付及兼容 IP |
 
 这些 ruleset 由 `qx-macos.conf` 的 `[filter_remote]` 引用，并使用 `force-policy` 绑定到对应策略。
 
@@ -105,3 +107,12 @@ GitHub ruleset 以域名为主，覆盖：
 4. Google / GitHub 等大型平台优先使用域名规则，不维护大范围固定 IP。
 5. 新增规则前检查是否会覆盖 AI、YouTube、Apple、Microsoft 等已有策略。
 6. 每个 ruleset 独立维护版本号和更新时间。
+
+
+## WeChat
+
+WeChat / Weixin 由本仓库的 `wechat.list` 维护，并通过 `force-policy=direct` 加载。
+
+域名规则是主要依据；少量单 IP 规则仅为了兼容旧上游列表中的直接 IP 连接场景，并应定期复核。
+
+不再直接引用第三方 WeChat ruleset。
