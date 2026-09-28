@@ -122,10 +122,32 @@ quantumultX/quantumultX.conf
 
 1. 节点订阅是否能成功更新。
 2. `地区优选·延迟` 等正则策略组是否能识别你的节点命名。
-3. OpenAI / Claude / Gemini 是否进入对应策略。
+3. 节点订阅更新完成后，分别手动运行一次 `OpenAI 安全节点`、`Claude 安全节点`、`Gemini 安全节点`；首次运行前 AI 策略会保持 `reject`。
 4. macOS 下 ChatGPT / Codex 更新是否命中 `AI应用更新`。
 5. iPhone 下 App Store 和 Apple 服务是否正常。
 6. YouTube 是否命中 `油管服务`，而不是被通用 Google 规则提前匹配。
+
+## 4. 初始化 AI 安全节点
+
+为了避免首次导入时随机把 AI 流量送入未经验证的节点，三个 AI 安全池默认都是 fail-closed：
+
+```text
+🤖 OpenAI安全节点 → reject
+🧠 Claude安全节点 → reject
+✨ Gemini安全节点 → reject
+```
+
+节点订阅更新成功后，在 Quantumult X 的任务入口分别运行：
+
+1. `OpenAI 安全节点`
+2. `Claude 安全节点`
+3. `Gemini 安全节点`
+
+脚本验证通过并选择节点后，AI 服务才会开始正常转发。
+
+之后模板中的低频 cron 会每天复核两次；当前节点仍安全时不会切换。
+
+详细机制见 [AI 安全节点筛选](ai-node-sifter.md)。
 
 ## 节点命名兼容性
 
