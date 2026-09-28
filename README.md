@@ -10,21 +10,38 @@ QxRuleSet/
 │   └── quantumultx/
 │       ├── ai-rules.md
 │       ├── configuration.md
+│       ├── dependencies.md
 │       ├── openai.md
 │       ├── rules.md
+│       ├── setup.md
+│       ├── service-rules.md
 │       └── streaming-ui-check.md
 ├── homeproxy/
 │   ├── customip.json
 │   └── customsite.json
 └── quantumultX/
     ├── cn.list
+    ├── qx-ios.conf
     ├── qx-macos.conf
     ├── rules/
-    │   └── ai/
-    │       ├── claude.list
-    │       ├── gemini.list
-    │       ├── openai.list
-    │       └── updates.list
+    │   ├── ai/
+    │   │   ├── claude.list
+    │   │   ├── gemini.list
+    │   │   ├── openai.list
+    │   │   └── updates.list
+    │   ├── corrections/
+    │   │   └── direct.list
+    │   └── services/
+    │       ├── apple.list
+    │       ├── appletv.list
+    │       ├── bilibili.list
+    │       ├── bing.list
+    │       ├── github.list
+    │       ├── google.list
+    │       ├── microsoft.list
+    │       ├── social.list
+    │       ├── spotify.list
+    │       └── youtube.list
     └── scripts/
         └── streaming-ui-check.js
 ```
@@ -32,8 +49,11 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [从模板到可用配置](docs/quantumultx/setup.md)
+- [外部依赖策略](docs/quantumultx/dependencies.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
+- [通用服务分流规则集](docs/quantumultx/service-rules.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
 - [HomeProxy](docs/homeproxy.md)

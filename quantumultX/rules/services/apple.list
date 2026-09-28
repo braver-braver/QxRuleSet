@@ -1,0 +1,23 @@
+## Apple services
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=苹果服务.
+## Deliberately concise; Apple TV has its own higher-priority list.
+
+HOST-SUFFIX,apple.com,苹果服务
+HOST-SUFFIX,apple.com.cn,苹果服务
+HOST-SUFFIX,apple.cn,苹果服务
+HOST-SUFFIX,icloud.com,苹果服务
+HOST-SUFFIX,icloud.com.cn,苹果服务
+HOST-SUFFIX,icloud.cn,苹果服务
+HOST-SUFFIX,icloud-content.com,苹果服务
+HOST-SUFFIX,icloud-content.com.cn,苹果服务
+HOST-SUFFIX,mzstatic.com,苹果服务
+HOST-SUFFIX,aaplimg.com,苹果服务
+HOST-SUFFIX,cdn-apple.com,苹果服务
+HOST-SUFFIX,apple-dns.net,苹果服务
+HOST-SUFFIX,apple-cloudkit.com,苹果服务
+HOST-SUFFIX,apple-mapkit.com,苹果服务
+HOST-SUFFIX,apple.news,苹果服务
+HOST-SUFFIX,appsto.re,苹果服务
+HOST-SUFFIX,itun.es,苹果服务

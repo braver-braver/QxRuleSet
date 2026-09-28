@@ -1,0 +1,52 @@
+## Microsoft
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=微软服务.
+## Bing-specific domains intentionally stay in bing.list.
+
+# Identity / account
+HOST-SUFFIX,microsoft.com,微软服务
+HOST-SUFFIX,microsoftonline.com,微软服务
+HOST-SUFFIX,msauth.net,微软服务
+HOST-SUFFIX,msauthimages.net,微软服务
+HOST-SUFFIX,msftauth.net,微软服务
+HOST-SUFFIX,msftauthimages.net,微软服务
+HOST-SUFFIX,msftidentity.com,微软服务
+HOST-SUFFIX,msidentity.com,微软服务
+HOST-SUFFIX,aka.ms,微软服务
+
+# Microsoft 365 / Outlook / OneDrive
+HOST-SUFFIX,office.com,微软服务
+HOST-SUFFIX,office.net,微软服务
+HOST-SUFFIX,office365.com,微软服务
+HOST-SUFFIX,microsoft365.com,微软服务
+HOST-SUFFIX,outlook.com,微软服务
+HOST-SUFFIX,outlookmobile.com,微软服务
+HOST-SUFFIX,hotmail.com,微软服务
+HOST-SUFFIX,live.com,微软服务
+HOST-SUFFIX,live.net,微软服务
+HOST-SUFFIX,onedrive.com,微软服务
+HOST-SUFFIX,sharepoint.com,微软服务
+HOST-SUFFIX,sharepointonline.com,微软服务
+HOST-SUFFIX,onenote.com,微软服务
+HOST-SUFFIX,onenote.net,微软服务
+
+# Azure / developer / CDN
+HOST-SUFFIX,azure.com,微软服务
+HOST-SUFFIX,azure.net,微软服务
+HOST-SUFFIX,azureedge.net,微软服务
+HOST-SUFFIX,cloudapp.net,微软服务
+HOST-SUFFIX,trafficmanager.net,微软服务
+HOST-SUFFIX,visualstudio.com,微软服务
+HOST-SUFFIX,vscode.dev,微软服务
+HOST-SUFFIX,msecnd.net,微软服务
+HOST-SUFFIX,msedge.net,微软服务
+HOST-SUFFIX,msft.net,微软服务
+
+# Windows / Skype
+HOST-SUFFIX,windows.com,微软服务
+HOST-SUFFIX,windows.net,微软服务
+HOST-SUFFIX,windowsupdate.com,微软服务
+HOST-SUFFIX,skype.com,微软服务
+HOST-SUFFIX,skypeassets.com,微软服务
+HOST-SUFFIX,skypeforbusiness.com,微软服务

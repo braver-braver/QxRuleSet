@@ -1,0 +1,13 @@
+## Apple TV
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=AppleTV服务.
+## Must be loaded before apple.list.
+
+HOST,hls-amt.itunes.apple.com,AppleTV服务
+HOST,hls.itunes.apple.com,AppleTV服务
+HOST,np-edge.itunes.apple.com,AppleTV服务
+HOST,play-edge.itunes.apple.com,AppleTV服务
+HOST,tv.applemusic.com,AppleTV服务
+HOST,uts-api.itunes.apple.com,AppleTV服务
+HOST-SUFFIX,tv.apple.com,AppleTV服务

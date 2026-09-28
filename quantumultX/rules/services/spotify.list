@@ -1,0 +1,34 @@
+## Spotify
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=Spotify.
+## Domain-based rules only; avoid stale fixed IPs and broad HOST-KEYWORD matches.
+
+# Core service
+HOST-SUFFIX,spotify.com,Spotify
+HOST-SUFFIX,spoti.fi,Spotify
+HOST-SUFFIX,spotify.app.link,Spotify
+HOST-SUFFIX,spotilocal.com,Spotify
+HOST-SUFFIX,tospotify.com,Spotify
+HOST-SUFFIX,byspotify.com,Spotify
+HOST-SUFFIX,spotify-everywhere.com,Spotify
+
+# Audio / images / CDN
+HOST-SUFFIX,pscdn.co,Spotify
+HOST-SUFFIX,scdn.co,Spotify
+HOST-SUFFIX,spotifycdn.com,Spotify
+HOST-SUFFIX,spotifycdn.net,Spotify
+HOST-SUFFIX,spotify-com.akamaized.net,Spotify
+HOST-SUFFIX,audio-ak-spotify-com.akamaized.net,Spotify
+HOST-SUFFIX,heads4-ak-spotify-com.akamaized.net,Spotify
+HOST,spotify.com.edgesuite.net,Spotify
+HOST,spotify.map.fastly.net,Spotify
+HOST,spotify.map.fastlylb.net,Spotify
+HOST,cdn-spotify-experiments.conductrics.com,Spotify
+
+# First-party web properties
+HOST-SUFFIX,spotifycharts.com,Spotify
+HOST-SUFFIX,spotifycodes.com,Spotify
+HOST-SUFFIX,spotify.design,Spotify
+HOST-SUFFIX,spotifyforbrands.com,Spotify
+HOST-SUFFIX,spotifynewsroom.jp,Spotify

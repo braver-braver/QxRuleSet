@@ -1,0 +1,19 @@
+## YouTube
+## version: 0.2.0
+## updated: 2026-09-28
+## Loaded with force-policy=油管服务.
+## Keep shared Google infrastructure in google.list.
+
+HOST,youtubei.googleapis.com,油管服务
+HOST,youtube.googleapis.com,油管服务
+HOST,yt3.ggpht.com,油管服务
+HOST-SUFFIX,googlevideo.com,油管服务
+HOST-SUFFIX,withyoutube.com,油管服务
+HOST-SUFFIX,youtu.be,油管服务
+HOST-SUFFIX,youtube-nocookie.com,油管服务
+HOST-SUFFIX,youtube.com,油管服务
+HOST-SUFFIX,youtubeeducation.com,油管服务
+HOST-SUFFIX,youtubegaming.com,油管服务
+HOST-SUFFIX,youtubekids.com,油管服务
+HOST-SUFFIX,yt.be,油管服务
+HOST-SUFFIX,ytimg.com,油管服务

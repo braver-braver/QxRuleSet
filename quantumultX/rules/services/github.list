@@ -1,0 +1,31 @@
+## GitHub
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=GitHub服务.
+## Prefer domain rules over fixed GitHub IP ranges.
+
+# Core GitHub
+HOST-SUFFIX,github.com,GitHub服务
+HOST-SUFFIX,githubusercontent.com,GitHub服务
+HOST-SUFFIX,githubassets.com,GitHub服务
+HOST-SUFFIX,github.io,GitHub服务
+HOST-SUFFIX,github.dev,GitHub服务
+HOST-SUFFIX,githubapp.com,GitHub服务
+HOST-SUFFIX,git.io,GitHub服务
+
+# Container registry / releases / storage
+HOST-SUFFIX,ghcr.io,GitHub服务
+HOST,github-cloud.s3.amazonaws.com,GitHub服务
+
+# GitHub products and status
+HOST-SUFFIX,github.blog,GitHub服务
+HOST-SUFFIX,github.community,GitHub服务
+HOST-SUFFIX,githubstatus.com,GitHub服务
+HOST-SUFFIX,githubnext.com,GitHub服务
+HOST-SUFFIX,githubpreview.dev,GitHub服务
+HOST-SUFFIX,githubcopilot.com,GitHub服务
+HOST-SUFFIX,repo.new,GitHub服务
+
+# npm is operated by GitHub and frequently used together with GitHub development workflows
+HOST-SUFFIX,npmjs.com,GitHub服务
+HOST-SUFFIX,npmjs.org,GitHub服务
