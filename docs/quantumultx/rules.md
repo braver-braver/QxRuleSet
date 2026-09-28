@@ -49,3 +49,7 @@ HOST-SUFFIX,example.com,reject
 3. 是否已存在重复规则。
 4. 是否会覆盖已有的 AI、GitHub、Google 等专用策略。
 5. 是否真的应该长期直连，而不是暂时性排障规则。
+
+## 专用规则集
+
+- [`openai.list`](../../quantumultX/openai.list)：OpenAI / ChatGPT 主业务与依赖域名，详见 [OpenAI / ChatGPT 分流与更新链路](openai.md)。
