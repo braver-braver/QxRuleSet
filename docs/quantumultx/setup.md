@@ -141,7 +141,7 @@ quantumultX/quantumultX.conf
 
 地区策略通过 `server-tag-regex` 匹配常见命名：
 
-- 香港 / HK / Hong Kong
+- 香港 / HK / HKG / Hong Kong
 - 台湾 / TW / Taiwan
 - 日本 / JP / Japan
 - 新加坡 / SG / Singapore
