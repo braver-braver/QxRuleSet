@@ -53,3 +53,4 @@ HOST-SUFFIX,example.com,reject
 ## 专用规则集
 
 - [`rules/ai/`](../../quantumultX/rules/ai/)：AI 服务独立 ruleset，详见 [AI 分流规则集](ai-rules.md)。
+- [`rules/services/`](../../quantumultX/rules/services/)：Spotify、社交媒体、Google、GitHub 独立 ruleset，详见 [通用服务分流规则集](service-rules.md)。
