@@ -1,2 +1,6 @@
 .codemap
 .lh
+
+# Local Quantumult X configs with subscriptions / MITM secrets
+quantumultX/*.private.conf
+quantumultX/private/
