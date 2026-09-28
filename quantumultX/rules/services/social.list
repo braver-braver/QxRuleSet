@@ -1,0 +1,56 @@
+## Social media
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=社交媒体.
+
+# X / Twitter
+HOST-SUFFIX,x.com,社交媒体
+HOST-SUFFIX,twitter.com,社交媒体
+HOST-SUFFIX,twimg.com,社交媒体
+HOST-SUFFIX,t.co,社交媒体
+HOST-SUFFIX,twittercdn.com,社交媒体
+HOST-SUFFIX,ads-twitter.com,社交媒体
+
+# Reddit
+HOST-SUFFIX,reddit.com,社交媒体
+HOST-SUFFIX,redd.it,社交媒体
+HOST-SUFFIX,redditmedia.com,社交媒体
+HOST-SUFFIX,redditstatic.com,社交媒体
+
+# Meta: Instagram / Facebook / Threads / Messenger / WhatsApp
+HOST-SUFFIX,instagram.com,社交媒体
+HOST-SUFFIX,cdninstagram.com,社交媒体
+HOST-SUFFIX,facebook.com,社交媒体
+HOST-SUFFIX,fbcdn.net,社交媒体
+HOST-SUFFIX,fbsbx.com,社交媒体
+HOST-SUFFIX,fb.me,社交媒体
+HOST-SUFFIX,messenger.com,社交媒体
+HOST-SUFFIX,threads.net,社交媒体
+HOST-SUFFIX,threads.com,社交媒体
+HOST-SUFFIX,whatsapp.com,社交媒体
+HOST-SUFFIX,whatsapp.net,社交媒体
+
+# Discord
+HOST-SUFFIX,discord.com,社交媒体
+HOST-SUFFIX,discord.gg,社交媒体
+HOST-SUFFIX,discordapp.com,社交媒体
+HOST-SUFFIX,discordapp.net,社交媒体
+HOST-SUFFIX,discord.media,社交媒体
+
+# Telegram
+HOST-SUFFIX,telegram.org,社交媒体
+HOST-SUFFIX,telegram.me,社交媒体
+HOST-SUFFIX,t.me,社交媒体
+HOST-SUFFIX,telegra.ph,社交媒体
+IP-CIDR,91.108.4.0/22,社交媒体,no-resolve
+IP-CIDR,91.108.8.0/22,社交媒体,no-resolve
+IP-CIDR,91.108.12.0/22,社交媒体,no-resolve
+IP-CIDR,91.108.16.0/22,社交媒体,no-resolve
+IP-CIDR,91.108.20.0/22,社交媒体,no-resolve
+IP-CIDR,91.108.56.0/22,社交媒体,no-resolve
+IP-CIDR,149.154.160.0/20,社交媒体,no-resolve
+
+# Bluesky
+HOST-SUFFIX,bsky.app,社交媒体
+HOST-SUFFIX,bsky.social,社交媒体
+HOST-SUFFIX,bsky.network,社交媒体
