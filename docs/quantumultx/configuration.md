@@ -124,7 +124,7 @@ quantumultX/quantumultX.conf
 - `17.0.0.0/8` 已从 `excluded_routes` 移除，避免 Apple / Apple TV 流量绕过 Quantumult X。
 - GitHub 域名已从 `dns_exclusion_list` 移除，使 GitHub 代理流量可以继续使用 Quantumult X 的远端解析机制。
 - iPhone 模板默认不设置 `udp_whitelist`，避免 VoIP、视频通话和游戏的高位 UDP 端口被误丢弃。
-- macOS 模板保留原有较保守的 UDP 白名单设置。
+- macOS 与 iPhone 模板都默认不设置 `udp_whitelist`，避免语音、视频、WebRTC 与游戏的高位 UDP 被误丢弃；严格白名单仅作为可选注释保留。
 
 
 ## 外部资源边界
