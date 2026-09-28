@@ -52,4 +52,4 @@ HOST-SUFFIX,example.com,reject
 
 ## 专用规则集
 
-- [`openai.list`](../../quantumultX/openai.list)：OpenAI / ChatGPT 主业务与依赖域名，详见 [OpenAI / ChatGPT 分流与更新链路](openai.md)。
+- [`rules/ai/`](../../quantumultX/rules/ai/)：AI 服务独立 ruleset，详见 [AI 分流规则集](ai-rules.md)。
