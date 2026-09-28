@@ -1,6 +1,11 @@
 # Quantumult X 配置
 
-配置文件：[`quantumultX/qx-macos.conf`](../../quantumultX/qx-macos.conf)
+配置模板：
+
+- macOS：[`quantumultX/qx-macos.conf`](../../quantumultX/qx-macos.conf)
+- iPhone / iOS：[`quantumultX/qx-ios.conf`](../../quantumultX/qx-ios.conf)
+
+实际使用方法见 [从模板到可用配置](setup.md)。
 
 ## 用途
 
@@ -76,3 +81,22 @@ force-policy=Gemini
 - MITM 密码
 - 私钥
 - 其他可用于直接访问个人服务的凭据
+
+
+## macOS 与 iPhone 的差异
+
+两端共享：
+
+- DNS
+- 地区策略组
+- AI / Google / GitHub / Spotify / 社交媒体等 ruleset
+- rewrite / filter 资源
+- 节点订阅格式
+
+macOS 额外加载桌面应用更新规则：
+
+```text
+rules/ai/updates.list
+```
+
+iPhone 不加载该文件，应用更新交给 App Store / Apple 服务。
