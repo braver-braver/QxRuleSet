@@ -10,6 +10,7 @@ QxRuleSet/
 │   └── quantumultx/
 │       ├── ai-rules.md
 │       ├── configuration.md
+│       ├── dependencies.md
 │       ├── openai.md
 │       ├── rules.md
 │       ├── setup.md
@@ -28,6 +29,8 @@ QxRuleSet/
     │   │   ├── gemini.list
     │   │   ├── openai.list
     │   │   └── updates.list
+    │   ├── corrections/
+    │   │   └── direct.list
     │   └── services/
     │       ├── apple.list
     │       ├── appletv.list
@@ -47,6 +50,7 @@ QxRuleSet/
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
+- [外部依赖策略](docs/quantumultx/dependencies.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
