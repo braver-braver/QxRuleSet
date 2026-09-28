@@ -50,6 +50,8 @@ final, proxy
 
 远程规则放在 `[filter_remote]`。
 
+OpenAI、Claude、Gemini 及 AI 桌面客户端更新规则由本仓库的 `quantumultX/rules/ai/` 独立维护，主配置只负责引用和绑定策略。详见 [AI 分流规则集](ai-rules.md)。
+
 如果远程规则文件内的策略名不应直接采用，应显式使用：
 
 ```text
