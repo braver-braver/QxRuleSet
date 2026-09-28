@@ -1,0 +1,37 @@
+## Google services
+## version: 0.1.0
+## updated: 2026-09-28
+## Loaded with force-policy=谷歌服务.
+## AI-specific rules are loaded before this list.
+## YouTube-specific domains intentionally stay out of this list.
+
+# Core Google
+HOST-SUFFIX,google.com,谷歌服务
+HOST-SUFFIX,g.co,谷歌服务
+HOST-SUFFIX,goo.gl,谷歌服务
+HOST-SUFFIX,c.gle,谷歌服务
+HOST-SUFFIX,googleapis.com,谷歌服务
+HOST-SUFFIX,googleapis.cn,谷歌服务
+HOST-SUFFIX,gstatic.com,谷歌服务
+HOST-SUFFIX,gstatic.cn,谷歌服务
+HOST-SUFFIX,googleusercontent.com,谷歌服务
+HOST-SUFFIX,ggpht.com,谷歌服务
+HOST-SUFFIX,1e100.net,谷歌服务
+
+# Google infrastructure / downloads
+HOST-SUFFIX,gvt0.com,谷歌服务
+HOST-SUFFIX,gvt1.com,谷歌服务
+HOST-SUFFIX,gvt2.com,谷歌服务
+HOST-SUFFIX,gvt3.com,谷歌服务
+HOST,dl.google.com,谷歌服务
+HOST,dl-ssl.google.com,谷歌服务
+
+# Gmail
+HOST-SUFFIX,gmail.com,谷歌服务
+HOST-SUFFIX,googlemail.com,谷歌服务
+
+# Google-owned web properties used by common services
+HOST-SUFFIX,withgoogle.com,谷歌服务
+HOST-SUFFIX,googleblog.com,谷歌服务
+HOST-SUFFIX,blogger.com,谷歌服务
+HOST-SUFFIX,blogspot.com,谷歌服务
