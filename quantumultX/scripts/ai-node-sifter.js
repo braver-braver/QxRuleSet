@@ -1,6 +1,6 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.1.0
+ * version: 0.1.1
  * updated: 2026-09-28
  *
  * Goal:
@@ -371,15 +371,12 @@ function latencyOf(result, node) {
 }
 
 function chooseBest(cfg, safe, latency, stickyRegion) {
-  function regionRank(region) {
-    if (stickyRegion && region === stickyRegion) return -1
-    let i = cfg.preferredRegions.indexOf(region)
-    return i >= 0 ? i : 999
-  }
+  // Stability first: if the previous exit region is still available, stay in that
+  // region. Otherwise all verified regions are equal and latency breaks the tie.
   return safe.slice().sort((a, b) => {
-    let ra = regionRank(a.region)
-    let rb = regionRank(b.region)
-    if (ra !== rb) return ra - rb
+    let aSame = stickyRegion && a.region === stickyRegion ? 0 : 1
+    let bSame = stickyRegion && b.region === stickyRegion ? 0 : 1
+    if (aSame !== bSame) return aSame - bSame
     return latencyOf(latency, a.node) - latencyOf(latency, b.node)
   })[0]
 }
@@ -457,6 +454,10 @@ async function finish(cfg, action, selected, results, latency) {
       await finish(cfg, "当前节点仍安全，保持不切换", current, [currentResult], {})
       return
     }
+
+    // The active node is no longer verified-safe. Fail closed before the full
+    // scan so normal AI traffic cannot continue leaking through that exit.
+    await setPolicy(policy, FAIL_CLOSED)
   }
 
   let scanTargets = candidates.filter(x => x !== current)
