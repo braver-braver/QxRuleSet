@@ -12,6 +12,7 @@ QxRuleSet/
 │       ├── configuration.md
 │       ├── openai.md
 │       ├── rules.md
+│       ├── setup.md
 │       ├── service-rules.md
 │       └── streaming-ui-check.md
 ├── homeproxy/
@@ -19,6 +20,7 @@ QxRuleSet/
 │   └── customsite.json
 └── quantumultX/
     ├── cn.list
+    ├── qx-ios.conf
     ├── qx-macos.conf
     ├── rules/
     │   ├── ai/
@@ -27,10 +29,16 @@ QxRuleSet/
     │   │   ├── openai.list
     │   │   └── updates.list
     │   └── services/
+    │       ├── apple.list
+    │       ├── appletv.list
+    │       ├── bilibili.list
+    │       ├── bing.list
     │       ├── github.list
     │       ├── google.list
+    │       ├── microsoft.list
     │       ├── social.list
-    │       └── spotify.list
+    │       ├── spotify.list
+    │       └── youtube.list
     └── scripts/
         └── streaming-ui-check.js
 ```
@@ -38,6 +46,7 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [从模板到可用配置](docs/quantumultx/setup.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
