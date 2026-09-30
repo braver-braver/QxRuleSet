@@ -52,24 +52,23 @@ opt-parser=true
 
 如果机场已经直接提供 Quantumult X 原生节点，并且不需要解析器，不建议为了规范化强行开启复杂处理。
 
-## `delreg`
+## `out`
 
-KOP-XIAO parser 支持：
-
-```text
-delreg=<regex>
-```
-
-用于从节点名称中删除匹配字段。
+KOP-XIAO parser 的 `out` 用于按节点名称删除整条节点，多关键词使用 `+` 连接。
 
 例如：
 
 ```text
-#delreg=(剩余|套餐|流量|到期|官网|注册|重置)
+#out=剩余+套餐+流量+到期+官网+注册+重置
 ```
 
-适合清理这些非节点信息：剩余流量、套餐到期、官网地址等。
+适合过滤机场订阅里常见的非代理节点：剩余流量、套餐到期、官网、注册提示等。
 
+### `delreg` 与 `out` 的区别
+
+`delreg=<regex>` 是从**节点名称内部删除匹配字段**，并不会删除整条节点。
+
+因此对“剩余流量”“套餐到期”这类伪节点，优先使用 `out=`；只有确实需要清理节点名称中的装饰字段时才使用 `delreg`。
 ## `rename`
 
 parser 的节点重命名格式为：
@@ -92,10 +91,10 @@ rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+�
 https://YOUR_SUBSCRIPTION_URL#rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
 ```
 
-也可以同时使用 `delreg`：
+也可以同时使用 `out` 过滤非节点条目：
 
 ```text
-https://YOUR_SUBSCRIPTION_URL#delreg=(剩余|套餐|流量|到期|官网|注册|重置)&rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
+https://YOUR_SUBSCRIPTION_URL#out=剩余+套餐+流量+到期+官网+注册+重置&rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
 ```
 
 ## 与 AI 安全节点的关系
@@ -142,5 +141,5 @@ AI 安全脚本最终仍会检查真实出口，因此不要把名称规范化�
 1. 能不改名就不改名。
 2. 只规范化确定含义的地区标签。
 3. 优先统一为短 token：`US / GB / JP / SG / HK / TW / KR`。
-4. `delreg` 只清理明确的非节点字段。
+4. `out` 用于过滤明确的非节点条目；`delreg` 仅用于清理节点名称内部字段。
 5. 修改后先检查地区策略组是否正确出现节点，再运行 AI 安全节点任务。
