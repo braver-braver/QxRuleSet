@@ -1,0 +1,37 @@
+# Quantumult X subscription normalization example
+#
+# Optional fragment for [server_remote].
+# Requires:
+# - resource_parser_url configured in [general]
+# - opt-parser=true on the subscription
+#
+# Keep the normal subscription form unless your provider's node tags cannot be
+# recognized by this repository's server-tag-regex policies.
+
+# Basic subscription:
+# https://YOUR_SUBSCRIPTION_URL, tag=Main Subscription, opt-parser=true, update-interval=86400, enabled=true
+
+# Filter obvious non-node metadata entries.
+# out removes nodes whose names contain any listed keyword; multiple keywords use +.
+# https://YOUR_SUBSCRIPTION_URL#out=剩余+套餐+流量+到期+官网+注册+重置, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
+
+# Normalize provider-specific city labels into stable region tokens.
+# KOP-XIAO resource-parser rename syntax:
+#   rename=旧名@新名+旧名@新名+...
+#
+# Example mappings:
+#   洛杉矶 -> US
+#   圣何塞 -> US
+#   西雅图 -> US
+#   东京   -> JP
+#   大阪   -> JP
+#   新加坡 -> SG
+#   伦敦   -> UK
+#
+# https://YOUR_SUBSCRIPTION_URL#out=剩余+套餐+流量+到期+官网+注册+重置&rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
+
+# Notes:
+# 1. Do not add a mapping unless you know what the provider label means.
+# 2. Do not map opaque labels such as "Premium-A" to a country by guesswork.
+# 3. AI safe-node routing still validates the real exit region and provider
+#    reachability; normalization only helps candidate discovery.

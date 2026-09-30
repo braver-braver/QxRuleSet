@@ -173,7 +173,15 @@ quantumultX/quantumultX.conf
 
 因此更换机场时通常只需要替换订阅 URL。
 
-如果机场采用完全不同的节点命名，只需要调整地区策略组的 `server-tag-regex`，不需要修改 ruleset。
+如果机场采用完全不同的节点命名，优先考虑使用 [订阅节点规范化](subscription-normalization.md) 在资源解析阶段统一标签；如果机场命名规则非常特殊，再调整本地 `server-tag-regex`。不需要修改 ruleset。
+
+模板文件：
+
+```text
+quantumultX/templates/subscription-normalization.conf.example
+```
+
+规范化是可选能力。默认订阅能被地区策略正确识别时，不要额外启用。
 
 ## 私密信息原则
 
