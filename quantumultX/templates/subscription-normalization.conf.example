@@ -11,9 +11,9 @@
 # Basic subscription:
 # https://YOUR_SUBSCRIPTION_URL, tag=Main Subscription, opt-parser=true, update-interval=86400, enabled=true
 
-# Remove obvious non-node metadata from node names.
-# delreg uses a regular expression against the node name.
-# https://YOUR_SUBSCRIPTION_URL#delreg=(剩余|套餐|流量|到期|官网|注册|重置), tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
+# Filter obvious non-node metadata entries.
+# out removes nodes whose names contain any listed keyword; multiple keywords use +.
+# https://YOUR_SUBSCRIPTION_URL#out=剩余+套餐+流量+到期+官网+注册+重置, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
 
 # Normalize provider-specific city labels into stable region tokens.
 # KOP-XIAO resource-parser rename syntax:
@@ -28,7 +28,7 @@
 #   新加坡 -> SG
 #   伦敦   -> UK
 #
-# https://YOUR_SUBSCRIPTION_URL#delreg=(剩余|套餐|流量|到期|官网|注册|重置)&rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
+# https://YOUR_SUBSCRIPTION_URL#out=剩余+套餐+流量+到期+官网+注册+重置&rename=洛杉矶@US+圣何塞@US+西雅图@US+东京@JP+大阪@JP+新加坡@SG+伦敦@UK, tag=Normalized Subscription, opt-parser=true, update-interval=86400, enabled=true
 
 # Notes:
 # 1. Do not add a mapping unless you know what the provider label means.
