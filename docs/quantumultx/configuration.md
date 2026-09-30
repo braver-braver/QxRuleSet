@@ -30,6 +30,7 @@
 - AI：Gemini、OpenAI、Claude
 - Google / Microsoft / GitHub / Apple
 - YouTube / Spotify / BiliBili
+- 国际媒体：BBC、Zaobao、Reuters、Bloomberg、FT、NYT、WSJ、Nikkei 等
 - 社交媒体
 - 香港、台湾、日本、新加坡、韩国、美国、英国节点
 
