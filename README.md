@@ -16,7 +16,8 @@ QxRuleSet/
 │       ├── rules.md
 │       ├── setup.md
 │       ├── service-rules.md
-│       └── streaming-ui-check.md
+│       ├── streaming-ui-check.md
+│       └── subscription-normalization.md
 ├── homeproxy/
 │   ├── customip.json
 │   └── customsite.json
@@ -42,6 +43,7 @@ QxRuleSet/
     │       ├── microsoft.list
     │       ├── social.list
     │       ├── spotify.list
+    │       ├── wechat.list
     │       └── youtube.list
     ├── scripts/
     │   ├── ai-node-sifter.js
