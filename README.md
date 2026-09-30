@@ -8,6 +8,7 @@ QxRuleSet/
 │   ├── homeproxy.md
 │   ├── maintenance.md
 │   └── quantumultx/
+│       ├── ai-node-sifter.md
 │       ├── ai-rules.md
 │       ├── configuration.md
 │       ├── dependencies.md
@@ -43,6 +44,7 @@ QxRuleSet/
     │       ├── spotify.list
     │       └── youtube.list
     └── scripts/
+        ├── ai-node-sifter.js
         └── streaming-ui-check.js
 ```
 
@@ -53,6 +55,7 @@ QxRuleSet/
 - [外部依赖策略](docs/quantumultx/dependencies.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
+- [AI 安全节点筛选](docs/quantumultx/ai-node-sifter.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
