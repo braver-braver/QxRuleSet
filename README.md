@@ -7,6 +7,8 @@ QxRuleSet/
 ├── docs/
 │   ├── homeproxy.md
 │   ├── maintenance.md
+│   ├── mihomo/
+│   │   └── setup.md
 │   └── quantumultx/
 │       ├── ai-node-sifter.md
 │       ├── ai-rules.md
@@ -21,6 +23,14 @@ QxRuleSet/
 ├── homeproxy/
 │   ├── customip.json
 │   └── customsite.json
+├── mihomo/
+│   ├── clash-party-override.js
+│   └── rules/
+│       ├── claude.yaml
+│       ├── direct.yaml
+│       ├── gemini.yaml
+│       ├── media.yaml
+│       └── openai.yaml
 └── quantumultX/
     ├── cn.list
     ├── qx-ios.conf
@@ -64,5 +74,6 @@ QxRuleSet/
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
 - [订阅节点规范化](docs/quantumultx/subscription-normalization.md)
+- [Mihomo / Clash Party（Windows）](docs/mihomo/setup.md)
 - [HomeProxy](docs/homeproxy.md)
 - [维护约定](docs/maintenance.md)
