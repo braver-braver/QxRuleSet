@@ -39,3 +39,9 @@ payload:
   - DOMAIN-SUFFIX,d.meituan.net
   - DOMAIN-SUFFIX,codexcn.com
   - DOMAIN,sub.cucloud.top
+
+  # WeChat / Weixin
+  - DOMAIN-SUFFIX,wechat.com
+  - DOMAIN-SUFFIX,weixin.qq.com
+  - DOMAIN-SUFFIX,weixin.com
+  - DOMAIN-SUFFIX,tenpay.com
