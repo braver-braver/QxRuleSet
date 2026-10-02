@@ -23,12 +23,13 @@ Clash Party 的覆写会在机场订阅加载后执行，因此可以：
 3. 不在仓库里保存订阅 URL、Token 或节点密码。
 4. 使用 Mihomo 的 `include-all-proxies` + `filter` 动态生成地区节点组。
 
-模板会替换：
+模板会接管：
 
 ```text
-proxy-groups
 rules
 ```
+
+对于代理组，模板会把自己的策略组放在前面，同时保留所有不重名的机场原有组，避免复杂订阅的 `dialer-proxy` / 链式代理依赖被破坏。
 
 并补充：
 
