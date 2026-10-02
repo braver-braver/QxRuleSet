@@ -339,7 +339,17 @@ function main(config) {
     ]),
   ];
 
-  config["proxy-groups"] = groups;
+  // Preserve provider-defined groups that do not collide with our group names.
+  // This keeps uncommon dialer-proxy / relay-style subscription dependencies intact.
+  const originalGroups = Array.isArray(config["proxy-groups"])
+    ? config["proxy-groups"]
+    : [];
+  const managedGroupNames = new Set(groups.map((group) => group.name));
+  config["proxy-groups"] = groups.concat(
+    originalGroups.filter(
+      (group) => group && group.name && !managedGroupNames.has(group.name),
+    ),
+  );
 
   config["rule-providers"] = Object.assign({}, config["rule-providers"] || {}, {
     openai: customRuleProvider("openai"),
