@@ -393,8 +393,7 @@ function main(config) {
     "GEOSITE,bilibili,📺 BiliBili",
     "GEOSITE,apple,🍎 Apple",
 
-    // WeChat and mainland traffic should stay direct.
-    "GEOSITE,wechat,DIRECT",
+    // WeChat is covered by direct_custom; mainland traffic stays direct.
     "GEOSITE,cn,DIRECT",
     "GEOIP,CN,DIRECT,no-resolve",
 
