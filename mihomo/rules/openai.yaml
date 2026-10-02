@@ -1,0 +1,26 @@
+# OpenAI / ChatGPT
+# version: 0.1.0
+# updated: 2026-10-02
+payload:
+  - DOMAIN-SUFFIX,chatgpt.com
+  - DOMAIN-SUFFIX,openai.com
+  - DOMAIN-SUFFIX,oaistatic.com
+  - DOMAIN-SUFFIX,oaiusercontent.com
+  - DOMAIN-SUFFIX,oaistatsig.com
+  - DOMAIN-SUFFIX,openaimerge.com
+  - DOMAIN-SUFFIX,workos.com
+  - DOMAIN-SUFFIX,workoscdn.com
+  - DOMAIN,ct.sendgrid.net
+  - DOMAIN-SUFFIX,intercom.io
+  - DOMAIN-SUFFIX,intercomcdn.com
+  - DOMAIN,challenges.cloudflare.com
+  - DOMAIN,js.stripe.com
+  - DOMAIN,o207216.ingest.sentry.io
+  - DOMAIN,o33249.ingest.sentry.io
+  - DOMAIN,rum.browser-intake-datadoghq.com
+  - DOMAIN,api.statsig.com
+  - DOMAIN-SUFFIX,chatgpt.livekit.cloud
+  - DOMAIN,client-api.arkoselabs.com
+  - DOMAIN-SUFFIX,events.statsigapi.net
+  - DOMAIN-SUFFIX,featuregates.org
+  - DOMAIN-SUFFIX,turn.livekit.cloud
