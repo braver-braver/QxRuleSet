@@ -12,6 +12,7 @@ QxRuleSet/
 │       ├── ai-rules.md
 │       ├── configuration.md
 │       ├── dependencies.md
+│       ├── ios.md
 │       ├── openai.md
 │       ├── rules.md
 │       ├── setup.md
@@ -55,6 +56,7 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [Quantumult X iOS 维护](docs/quantumultx/ios.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
 - [外部依赖策略](docs/quantumultx/dependencies.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)

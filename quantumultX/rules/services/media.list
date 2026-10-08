@@ -1,0 +1,59 @@
+## International news / media
+## version: 0.1.0
+## updated: 2026-09-30
+## Loaded with force-policy=国际媒体.
+## Domain-first rules only. Avoid broad shared CDN/IP ranges.
+
+# BBC
+HOST-SUFFIX,bbc.co.uk,国际媒体
+HOST-SUFFIX,bbc.com,国际媒体
+HOST-SUFFIX,bbc.net.uk,国际媒体
+HOST-SUFFIX,bbci.co.uk,国际媒体
+HOST-SUFFIX,bbcmedia.co.uk,国际媒体
+HOST-SUFFIX,bbcverticals.com,国际媒体
+HOST-SUFFIX,bbc-reporting-api.app,国际媒体
+HOST-SUFFIX,bbcchinese.com,国际媒体
+HOST-SUFFIX,bbcpersian.com,国际媒体
+HOST,aod-dash-uk-live.akamaized.net,国际媒体
+HOST,aod-hls-uk-live.akamaized.net,国际媒体
+HOST,as-dash-uk-live.akamaized.net,国际媒体
+HOST,as-hls-uk-live.akamaized.net,国际媒体
+HOST,vod-dash-uk-live.akamaized.net,国际媒体
+HOST,vod-dash-ww-live.akamaized.net,国际媒体
+HOST,vod-hls-uk-live.akamaized.net,国际媒体
+HOST,vod-sub-uk-live.akamaized.net,国际媒体
+HOST,vod-thumb-uk-live.akamaized.net,国际媒体
+HOST,vod-thumb-ww-live.akamaized.net,国际媒体
+HOST,vs-cmaf-push-uk-live.akamaized.net,国际媒体
+
+# Singapore / regional Asia
+HOST-SUFFIX,zaobao.com,国际媒体
+HOST-SUFFIX,zaobao.com.sg,国际媒体
+HOST-SUFFIX,channelnewsasia.com,国际媒体
+HOST-SUFFIX,straitstimes.com,国际媒体
+HOST-SUFFIX,businesstimes.com.sg,国际媒体
+HOST-SUFFIX,scmp.com,国际媒体
+
+# Japan
+HOST-SUFFIX,nikkei.co.jp,国际媒体
+HOST-SUFFIX,nikkei.com,国际媒体
+HOST-SUFFIX,nikkei.jp,国际媒体
+
+# Global / US / UK business and general news
+HOST-SUFFIX,reuters.com,国际媒体
+HOST-SUFFIX,reutersmedia.net,国际媒体
+HOST-SUFFIX,apnews.com,国际媒体
+HOST-SUFFIX,bloomberg.com,国际媒体
+HOST-SUFFIX,bloomberg.net,国际媒体
+HOST-SUFFIX,ft.com,国际媒体
+HOST-SUFFIX,economist.com,国际媒体
+HOST-SUFFIX,theguardian.com,国际媒体
+HOST-SUFFIX,nytimes.com,国际媒体
+HOST-SUFFIX,nyt.com,国际媒体
+HOST-SUFFIX,nytco.com,国际媒体
+HOST-SUFFIX,wsj.com,国际媒体
+HOST-SUFFIX,cnn.com,国际媒体
+HOST-SUFFIX,aljazeera.com,国际媒体
+HOST-SUFFIX,dw.com,国际媒体
+HOST-SUFFIX,france24.com,国际媒体
+HOST-SUFFIX,rfi.fr,国际媒体
