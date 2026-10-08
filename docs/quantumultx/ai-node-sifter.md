@@ -6,7 +6,7 @@
 
 普通的 `available` 或 `url-latency-benchmark` 只能判断节点是否可联网、延迟是否合适，不能判断该出口是否真正被 OpenAI、Claude 或 Gemini 接受。
 
-AI 安全节点层额外执行服务级验证，只允许明确验证通过的节点承载对应 AI 流量。
+AI 安全节点层额外执行服务级验证。脚本现在支持两种运行模式：iOS/默认仍可使用严格 fail-closed；macOS 模板使用 sticky recovery，优先保持和恢复上一次验证通过的节点，避免睡眠/开盖后的瞬时网络错误把策略误打回 `reject`。
 
 > 该机制用于降低误走不受支持出口的风险，不构成任何账号安全或封禁保证。
 
@@ -142,42 +142,82 @@ API 请求使用明显无效的测试 key，只根据响应状态判断服务端
 不因为更低延迟而切换
 ```
 
-这是默认的稳定性策略。
-
-## 当前节点失效
-
-当前节点变成 `FAIL` 或 `UNCERTAIN` 时：
-
-1. 立即把安全节点池切换到 `reject`；
-2. 再扫描其余候选节点；
-3. 只保留 `PASS` 节点；
-4. 使用 `url_latency_benchmark` 测试这些安全节点；
-5. 如果原出口地区仍有其他安全节点，优先保持同地区；
-6. 否则从全部安全节点中按延迟选择；
-7. 使用 `set_policy_state` 切换策略。
-
-这意味着扫描期间普通 AI 流量也不会继续通过已经失效的出口。
-
-## 无安全节点
-
-如果没有任何候选节点明确通过验证：
+每次 `PASS` 还会通过 `$prefs` 记录：
 
 ```text
-安全节点池 → reject
+last-known-good node
+region
+verifiedAt
 ```
 
-不会 fallback 到：
+该状态在 Quantumult X 运行期间持久保存，可用于 macOS 睡眠/开盖或配置状态重载后的自动恢复。
 
-- `proxy`
-- `全球策略`
-- 随机节点
-- 普通 latency policy
+## 两种恢复模式
 
-这属于有意的 fail-closed 行为。
+### strict / fail-closed
+
+未传入 `mode=sticky` 时保留原来的严格行为：
+
+1. 当前节点是 `PASS`：保持；
+2. 当前节点是 `FAIL` 或 `UNCERTAIN`：先切 `reject`；
+3. 扫描其余候选；
+4. 只选择 `PASS`；
+5. 没有 `PASS`：继续 `reject`。
+
+该模式仍适用于希望“任何无法确认都立即阻断”的场景。
+
+### sticky recovery（macOS 默认）
+
+macOS 模板给脚本传入：
+
+```text
+mode=sticky
+```
+
+行为改为：
+
+```text
+当前 PASS
+  → 保持当前节点
+  → 更新 last-known-good
+
+当前 UNCERTAIN
+  → 不切 reject
+  → 保留当前节点
+  → 弹出通知
+
+当前明确 FAIL
+  → 扫描其他候选
+  → 有 PASS：切换到验证通过节点
+  → 无 PASS：保留原节点并通知
+```
+
+`UNCERTAIN` 包括刚恢复网络时常见的：
+
+- DNS 尚未稳定；
+- timeout；
+- Cloudflare challenge；
+- 临时 403；
+- 暂时无法识别出口地区。
+
+因此这类瞬时状态不会再破坏原来的策略选择。
+
+如果 Quantumult X 在重新联网/策略重载后已经把安全组落到 `reject`：
+
+1. 读取持久化的 `last-known-good`；
+2. 直接指定该节点做服务级复测；
+3. `PASS`：自动恢复它；
+4. `UNCERTAIN`：仍恢复上次节点，但通知“本次无法重新确认”；
+5. 明确 `FAIL`：不恢复已知失败出口，扫描其他候选；
+6. 仍没有可用候选：保持当前 `reject` 并通知。
+
+这样既避免把一次开盖重连误当成地区失效，也不会在已经明确判定为不受支持地区时盲目恢复。
 
 ## 自动任务
 
-模板默认每天执行两次低频复核：
+### 低频定时复核
+
+macOS 模板每天执行两次：
 
 ```text
 03:15 / 15:15  OpenAI
@@ -185,9 +225,35 @@ API 请求使用明显无效的测试 key，只根据响应状态判断服务端
 03:35 / 15:35  Gemini
 ```
 
-任务使用设备本地时区。
+均使用 `mode=sticky`。
 
-由于采用 sticky routing，正常情况下自动任务只验证当前节点，不会全量扫描，也不会频繁切换出口。
+### 网络变化复核
+
+Quantumult X 官方支持：
+
+```text
+event-network
+```
+
+网络变化时会触发任务。macOS 模板利用它处理开盖、Wi-Fi 重连和网络切换：
+
+```text
+网络变化
+  ↓
+OpenAI 等待 4 秒
+Claude 等待 7 秒
+Gemini 等待 10 秒
+  ↓
+复测当前/last-known-good
+  ↓
+PASS → 静默保持/恢复
+UNCERTAIN → 保留并通知
+FAIL → 扫描替代节点
+```
+
+三个 provider 错峰执行，避免刚恢复网络时同时发起大量探测。
+
+脚本还会对同一 provider 的网络事件做 15 秒去抖，减少 Wi-Fi 状态抖动导致的重复任务。
 
 ## Quantumult X API
 
