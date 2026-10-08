@@ -82,7 +82,7 @@ NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit.snippet
 - 该项目需要同步适配 iOS 天气 App；
 - 脚本 bundle 和第三方天气 provider 逻辑更新频率高，不适合在本仓库 fork。
 
-它属于 iOS optional rewrite，不影响基础分流。启用时需要 MITM，并应评估第三方天气 provider 的位置数据隐私边界。
+它属于 iOS 18+ optional rewrite，不影响基础分流。启用时需要 MITM，并应评估第三方天气 provider 的位置数据隐私边界。
 
 ### 诊断工具
 

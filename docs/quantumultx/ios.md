@@ -16,15 +16,7 @@ quantumultX/qx-ios.conf
 - 这些加密 DNS 会堆叠并并发查询；
 - 如果同 pattern 同时存在明文 DNS 与 DoH/DoQ，加密 DNS 优先。
 
-因此 iOS 模板对国内常用服务采用两条同 pattern DoH：
-
-```text
-DNSPod DoH
-+
-AliDNS DoH
-```
-
-在 1.8.1 (950)+ 上可并发；在 1.8.0 上仍保持第一条可用，不要求用户安装 Beta。
+为兼容正式版 1.8.0，**生产模板对每个 domain pattern 只配置一条 DoH**。域名根节点和子域名分别声明（如 `/qq.com/` 与 `/*.qq.com/`），避免漏匹配。1.8.1 (950)+ 的同 pattern 多 DoH/DoQ 并发能力仅作为注释示例保留，不强制用户升级 Beta。
 
 ## 为什么不使用 `{# note #}`
 
@@ -101,6 +93,8 @@ enabled=false
 
 ### iRingo WeatherKit
 
+**最低 iOS 18**（上游要求）。不满足条件时不要启用该资源。
+
 iOS 模板额外提供：
 
 ```text
@@ -109,7 +103,7 @@ https://github.com/NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit
 
 默认关闭。
 
-启用后需要：
+启用前请先确认 iOS 18 或更新版本。满足版本要求后：
 
 1. 在 Quantumult X 生成/安装 MITM CA；
 2. 在 iOS 中信任该 CA；
@@ -137,7 +131,7 @@ iOS：
 - 不加载桌面 AI application update rules；
 - App 更新由 App Store / Apple 服务处理；
 - 提供 WeatherKit 可选 Rewrite；
-- 可以利用 1.8.1 (950) 的同 pattern 多 DoH 并发。
+- 在 1.8.1 (950) TestFlight 可自行实验同 pattern 多 DoH；生产模板默认不启用。
 
 macOS：
 

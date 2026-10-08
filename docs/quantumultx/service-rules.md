@@ -12,6 +12,7 @@ quantumultX/rules/services/
 ├── bing.list
 ├── github.list
 ├── google.list
+├── media.list
 ├── microsoft.list
 ├── social.list
 ├── spotify.list
@@ -27,6 +28,7 @@ quantumultX/rules/services/
 | `social.list` | `社交媒体` | X、Reddit、Meta、Discord、Telegram、Bluesky |
 | `google.list` | `谷歌服务` | Google Search、Gmail、Drive、API、静态资源与下载基础设施 |
 | `github.list` | `GitHub服务` | GitHub Web/API/Git、静态资源、release、GHCR、Copilot 及 npm 相关域名 |
+| `media.list` | `国际媒体` | BBC、Zaobao、Reuters、Bloomberg、FT、NYT、WSJ、Nikkei 等国际新闻媒体 |
 | `youtube.list` | `油管服务` | YouTube Web / API / video CDN |
 | `bing.list` | `Bing服务` | Bing Search 与相关服务 |
 | `microsoft.list` | `微软服务` | Microsoft 365 / Outlook / OneDrive / Azure / Windows |
@@ -86,6 +88,42 @@ Google ruleset 额外维护地区 Google Search 域名（例如 `google.co.uk`�
 YouTube Data API 的 `youtube.googleapis.com` 明确维护在 `youtube.list`，因此会在通用 `googleapis.com` 规则之前进入 `油管服务`。
 
 Google ruleset 不维护 Google IP 段，避免共享 Google 网络地址把 YouTube、Gemini 或其他 Google 产品错误吸入同一策略。
+
+## 国际媒体
+
+`media.list` 用于把国际新闻媒体从通用 `final, proxy` 中单独分离出来，当前重点覆盖：
+
+- BBC（含常见 BBC iPlayer 专用媒体主机）
+- 联合早报 / Zaobao
+- Channel NewsAsia / The Straits Times / Business Times Singapore
+- Reuters / AP / Bloomberg
+- Financial Times / The Economist / The Guardian
+- New York Times / Wall Street Journal / CNN
+- Nikkei / SCMP
+- Al Jazeera / DW / France 24 / RFI
+
+策略组：
+
+```text
+国际媒体
+├── 🇸🇬 新加坡顺选·健康
+├── 🇯🇵 日本顺选·健康
+├── 🇬🇧 英国顺选·健康
+├── 🇺🇸 美国顺选·健康
+├── 🇭🇰 香港顺选·健康
+├── 🇨🇳 台湾顺选·健康
+├── 对应地区延迟优选
+├── proxy
+└── direct
+```
+
+默认第一项是新加坡健康组，适合亚洲国际媒体与 Zaobao 等站点的常规浏览。
+
+BBC News 普通网页并不要求英国出口；但 BBC iPlayer 等具有地区限制的内容仍需手动选择英国节点。当前没有为媒体服务引入类似 AI 的自动安全节点筛选，因为媒体访问失败通常不涉及账户安全风险，先保持规则简单、可解释。
+
+`media.list` 只维护媒体自身域名和少量明确属于 BBC 的媒体分发主机，不纳入整个 Akamai / Cloudflare / Fastly 等共享 CDN，以避免误抓其他服务。
+
+在 `[filter_remote]` 中，媒体规则放在广告过滤之后，因此已知广告/跟踪域名仍有机会先被广告规则拦截。
 
 ## GitHub
 

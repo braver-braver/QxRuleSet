@@ -32,6 +32,12 @@ iPhone 版本不加载桌面更新 ruleset。
 
 iOS App 更新由 App Store / Apple 服务处理，因此没有必要让手机访问 ChatGPT/Codex Desktop 的 Sparkle appcast。
 
+### iPhone DNS
+
+iPhone 模板默认使用 DoH，并对常见国内服务使用域名级 DoH 映射。正常情况下不需要用户再手工配置 DNS。
+
+当前模板仍以 Quantumult X 1.8.0 正式版为最低兼容基线；如果正在使用 1.8.1 (950+) TestFlight，可以自行实验同一域名多 DoH/DoQ 并发，但不要把 Beta-only 语法加入需要兼容正式版/macOS 的共享配置。
+
 ## 创建私有配置
 
 不要直接把订阅地址或 MITM 私钥写进 Git 跟踪的模板。
