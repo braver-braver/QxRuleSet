@@ -87,11 +87,12 @@ force-policy=Gemini
 
 两端共享：
 
-- DNS
 - 地区策略组
 - AI / Google / GitHub / Spotify / 社交媒体等 ruleset
 - rewrite / filter 资源
 - 节点订阅格式
+
+DNS 不再完全共用：iPhone 模板优先采用域名级 DoH；macOS 继续保持更保守的兼容配置。
 
 macOS 额外加载桌面应用更新规则：
 
@@ -100,6 +101,26 @@ rules/ai/updates.list
 ```
 
 iPhone 不加载该文件，应用更新交给 App Store / Apple 服务。
+
+### iPhone 域名级 DoH
+
+`qx-ios.conf` 不再为 QQ、微信、淘宝、京东、BiliBili、网易、iCloud 中国区等服务使用明文 UDP/53 DNS，而是使用域名级 DoH。
+
+默认 resolver：
+
+```text
+https://dns.alidns.com/dns-query
+https://doh.pub/dns-query
+```
+
+域名级映射遵循两个原则：
+
+1. root/apex 与子域名分别声明，例如 `/qq.com/` 与 `/*.qq.com/`，避免只写 wildcard 时漏掉根域名。
+2. 当前生产模板每个 domain pattern 只绑定一个 DoH，以兼容 Quantumult X 1.8.0 正式版。
+
+Quantumult X 1.8.1 (950+) TestFlight 已支持同一 domain pattern 的多个 DoH/DoQ 堆叠并发查询；该能力暂时只作为注释示例保留，不作为生产模板的最低版本要求。
+
+同样地，950 新增的 `{# note #}` filter/rewrite 元数据暂时不写入仓库模板，因为 1.8.0 以及较旧 macOS 版本会把这种行视为非法配置。
 
 
 ## 标准运行文件
