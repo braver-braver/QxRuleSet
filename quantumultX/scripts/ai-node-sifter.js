@@ -478,8 +478,9 @@ function isBackgroundRun(args) {
 
 async function finish(cfg, action, selected, results, latency, args) {
   if (isBackgroundRun(args)) {
-    // Healthy sticky checks stay quiet. Recovery, uncertainty and failures notify.
-    if (action.indexOf("仍安全") < 0) {
+    // Healthy checks and successful last-good restoration stay quiet.
+    // Uncertainty, confirmed failure and fallback/switch events notify.
+    if (action.indexOf("仍安全") < 0 && action.indexOf("已恢复上次验证通过") < 0) {
       $notify("AI 安全节点 · " + cfg.name, action, selected || FAIL_CLOSED)
     }
     $done()
