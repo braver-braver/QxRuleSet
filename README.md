@@ -18,7 +18,8 @@ QxRuleSet/
 │       ├── setup.md
 │       ├── service-rules.md
 │       ├── streaming-ui-check.md
-│       └── subscription-normalization.md
+│       ├── subscription-normalization.md
+│       └── upgrade.md
 ├── homeproxy/
 │   ├── customip.json
 │   └── customsite.json
