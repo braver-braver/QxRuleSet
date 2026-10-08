@@ -1,6 +1,6 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.2.0
+ * version: 0.2.1
  * updated: 2026-10-08
  *
  * Goal:
@@ -27,7 +27,7 @@ const TIMEOUT = 7000
 const TRACE_TIMEOUT = 4500
 const FAIL_CLOSED = "reject"
 const PREF_PREFIX = "qxrule.ai-node-sifter."
-const NETWORK_DEBOUNCE_MS = 15000
+// A network event supersedes older checks; settle after the latest event.
 
 const PROVIDERS = {
   openai: {
@@ -111,14 +111,23 @@ function saveLastGood(provider, result) {
   }
 }
 
-function acquireNetworkRun(provider) {
+function recordNetworkEvent(provider) {
+  // All simultaneous QX task invocations share $prefs, not JS globals.
+  // A fresh token ensures the most recent network change wins even if two
+  // events arrive in the same millisecond.
+  let token = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)
   try {
-    let key = prefKey(provider, "network-run")
-    let now = Date.now()
-    let previous = Number($prefs.valueForKey(key) || 0)
-    if (previous > 0 && now - previous < NETWORK_DEBOUNCE_MS) return false
-    $prefs.setValueForKey(String(now), key)
-    return true
+    if ($prefs.setValueForKey(token, prefKey(provider, "network-event")) === false) return ""
+  } catch (_) {
+    return ""
+  }
+  return token
+}
+
+function isLatestNetworkEvent(provider, token) {
+  if (!token) return true // Persistence unavailable: run without coalescing.
+  try {
+    return $prefs.valueForKey(prefKey(provider, "network-event")) === token
   } catch (_) {
     return true
   }
@@ -437,7 +446,12 @@ function chooseBest(cfg, safe, latency, stickyRegion) {
   })[0]
 }
 
-async function setPolicy(policy, target) {
+async function setPolicy(policy, target, args) {
+  // Do not let a superseded network check overwrite a newer selection.
+  if (args && isNetworkRun(args) &&
+      !isLatestNetworkEvent(String(args.provider || "").toLowerCase(), args.networkToken)) {
+    return false
+  }
   return qx("set_policy_state", { [policy]: target })
 }
 
@@ -477,6 +491,11 @@ function isBackgroundRun(args) {
 }
 
 async function finish(cfg, action, selected, results, latency, args) {
+  if (isNetworkRun(args) &&
+      !isLatestNetworkEvent(String(args.provider || "").toLowerCase(), args.networkToken)) {
+    $done() // A later network event owns recovery and notification.
+    return
+  }
   if (isBackgroundRun(args)) {
     // Healthy checks and successful last-good restoration stay quiet.
     // Uncertainty, confirmed failure and fallback/switch events notify.
@@ -501,14 +520,15 @@ async function finish(cfg, action, selected, results, latency, args) {
   let sticky = isStickyMode(args)
 
   if (isNetworkRun(args)) {
-    if (!acquireNetworkRun(provider)) {
-      $done()
-      return
-    }
+    args.networkToken = recordNetworkEvent(provider)
     let delaySeconds = Number(args.delay || 5)
     if (!Number.isFinite(delaySeconds)) delaySeconds = 5
     delaySeconds = Math.max(0, Math.min(15, delaySeconds))
     await sleep(delaySeconds * 1000)
+    if (!isLatestNetworkEvent(provider, args.networkToken)) {
+      $done() // The latest event will run its own check after settling.
+      return
+    }
   }
 
   let policy = cfg.policy
@@ -518,7 +538,7 @@ async function finish(cfg, action, selected, results, latency, args) {
 
   if (!candidates.length) {
     if (!sticky) {
-      await setPolicy(policy, FAIL_CLOSED)
+      await setPolicy(policy, FAIL_CLOSED, args)
       await finish(cfg, "没有候选节点，已 fail-closed", FAIL_CLOSED, [], {}, args)
     } else {
       await finish(cfg, "没有候选节点，保留当前策略并提醒", current || FAIL_CLOSED, [], {}, args)
@@ -534,6 +554,10 @@ async function finish(cfg, action, selected, results, latency, args) {
     currentResult = await testNode(provider, current)
 
     if (currentResult.status === "pass") {
+      if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+        $done()
+        return
+      }
       saveLastGood(provider, currentResult)
       await finish(cfg, "当前节点仍安全，保持不切换", current, [currentResult], {}, args)
       return
@@ -555,7 +579,7 @@ async function finish(cfg, action, selected, results, latency, args) {
 
     if (!sticky) {
       // Legacy fail-closed mode: stop AI traffic before scanning alternatives.
-      await setPolicy(policy, FAIL_CLOSED)
+      await setPolicy(policy, FAIL_CLOSED, args)
     }
   } else if (sticky && lastGood && candidates.indexOf(lastGood.node) >= 0) {
     // QX may come back from sleep/reload with the static policy on reject.
@@ -563,7 +587,11 @@ async function finish(cfg, action, selected, results, latency, args) {
     rememberedResult = await testNode(provider, lastGood.node)
 
     if (rememberedResult.status === "pass") {
-      await setPolicy(policy, lastGood.node)
+      await setPolicy(policy, lastGood.node, args)
+      if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+        $done()
+        return
+      }
       saveLastGood(provider, rememberedResult)
       await finish(
         cfg,
@@ -580,7 +608,7 @@ async function finish(cfg, action, selected, results, latency, args) {
       // Preserve continuity across transient network recovery. This node was
       // previously verified; restore it, but notify because this run could not
       // positively re-verify it.
-      await setPolicy(policy, lastGood.node)
+      await setPolicy(policy, lastGood.node, args)
       await finish(
         cfg,
         "网络状态仍不确定，已恢复上次验证节点；请留意可用性",
@@ -605,7 +633,7 @@ async function finish(cfg, action, selected, results, latency, args) {
   let safe = results.filter(x => x.status === "pass")
   if (!safe.length) {
     if (!sticky) {
-      await setPolicy(policy, FAIL_CLOSED)
+      await setPolicy(policy, FAIL_CLOSED, args)
       await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {}, args)
       return
     }
@@ -632,7 +660,11 @@ async function finish(cfg, action, selected, results, latency, args) {
 
   let best = chooseBest(cfg, safe, latency, stickyRegion)
 
-  await setPolicy(policy, best.node)
+  await setPolicy(policy, best.node, args)
+  if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+    $done()
+    return
+  }
   saveLastGood(provider, best)
   await finish(cfg, "已切换到验证通过的安全节点", best.node, results, latency, args)
 })().catch(async e => {
@@ -643,7 +675,7 @@ async function finish(cfg, action, selected, results, latency, args) {
 
   if (!sticky) {
     try {
-      if (cfg.policy) await setPolicy(cfg.policy, FAIL_CLOSED)
+      if (cfg.policy) await setPolicy(cfg.policy, FAIL_CLOSED, args)
     } catch (_) {}
   }
 
