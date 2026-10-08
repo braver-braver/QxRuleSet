@@ -40,6 +40,7 @@ QxRuleSet/
     │       ├── bing.list
     │       ├── github.list
     │       ├── google.list
+    │       ├── media.list
     │       ├── microsoft.list
     │       ├── social.list
     │       ├── spotify.list
