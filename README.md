@@ -15,6 +15,7 @@ QxRuleSet/
 │       ├── ios.md
 │       ├── openai.md
 │       ├── rules.md
+│       ├── rewrites.md
 │       ├── setup.md
 │       ├── service-rules.md
 │       ├── streaming-ui-check.md
@@ -48,6 +49,9 @@ QxRuleSet/
     │       ├── spotify.list
     │       ├── wechat.list
     │       └── youtube.list
+    ├── rewrites/
+    │   └── common/
+    │       └── google-redirect.conf
     ├── scripts/
     │   ├── ai-node-sifter.js
     │   └── streaming-ui-check.js
@@ -59,6 +63,7 @@ QxRuleSet/
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
 - [Quantumult X iOS 维护](docs/quantumultx/ios.md)
+- [iOS Rewrite 资产清单与维护](docs/quantumultx/rewrites.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
 - [版本定位与增量升级](docs/quantumultx/upgrade.md)
 - [外部依赖策略](docs/quantumultx/dependencies.md)

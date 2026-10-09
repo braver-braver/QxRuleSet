@@ -8,6 +8,16 @@
 - 地区节点：修改 `server-tag-regex` 后检查大小写修饰符和排除表达式。
 - 脚本：修改后至少做 JavaScript 语法检查。
 
+## 可选 Rewrite 的维护约定
+
+- 默认关闭：模板中的 `rewrite_remote` 永远不自动启用新加入的 HTTPS/MITM 规则。
+- 新的自维护模块放在 `quantumultX/rewrites/`，需注明版本、更新时间、匹配 hostname、MITM 前提与风险。
+- 修改正则时至少验证正常 URL、带查询参数 URL、错误 host 相似名三个场景；JS 请求/响应转换需使用**脱敏 fixture** 测试。
+- 只有存在 iPhone 的资源解析、请求命中和功能 A/B 证据时，才能在文档中写“已验证生效”。
+- 不 Fork 授权不明确或高度混淆的第三方实现，优先按照实际需求重写少量可审计规则。
+- 不公开上传/提交任何用户个人 `[mitm]`、`passphrase`、`p12`、Cookie、订阅 URL 和令牌。
+- 资产清单见 [iOS Rewrite 维护](quantumultx/rewrites.md)。
+
 ## 模板版本标记
 
 `quantumultX/qx-macos.conf` 与 `quantumultX/qx-ios.conf` 顶部必须同步保留**仅作为注释**的三个字段：
