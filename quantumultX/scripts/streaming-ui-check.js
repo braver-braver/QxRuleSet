@@ -300,18 +300,13 @@ function testClaudeAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 401 = authentication_error → API 可达 (密钥无效而已)
-      // 400 = invalid_request     → API 可达
-      // 429 = rate_limit          → API 可达
-      // 529 = overloaded          → API 可达
+      // 无效密钥仅证明接口可达；明确地区阻断优先于 HTTP 状态码判断。
       if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
         result.ClaudeAPI = "<b>Claude API: </b>地区受限 🚫"
       } else if (s === 401 || s === 400) {
         result.ClaudeAPI = "<b>Claude API: </b>接口可达 (未认证) ⚠️"
       } else if (s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.ClaudeAPI = "<b>Claude API: </b>受限 🚫"
       } else if (s === 403) {
         result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403) ⚠️"
       } else {
@@ -370,15 +365,13 @@ function testOpenAIAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 401 = invalid_api_key → API 可达
+      // 401 = invalid_api_key 仅代表接口可达，不能证明能调用模型
       if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
         result.OpenAIAPI = "<b>OpenAI API: </b>地区受限 🚫"
       } else if (s === 401) {
         result.OpenAIAPI = "<b>OpenAI API: </b>接口可达 (未认证) ⚠️"
       } else if (s === 429) {
         result.OpenAIAPI = "<b>OpenAI API: </b>限流 (未验证) ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.OpenAIAPI = "<b>OpenAI API: </b>受限 🚫"
       } else if (s === 403) {
         result.OpenAIAPI = "<b>OpenAI API: </b>访问受限 (403) ⚠️"
       } else {
@@ -418,7 +411,7 @@ function testGemini() {
         } else {
           result.Gemini = "<b>Gemini: </b>重定向异常 ⚠️"
         }
-      } else if (s === 451 || hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)) {
+      } else if (s === 451 || (s === 403 && (hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)))) {
         result.Gemini = "<b>Gemini: </b>未支持 🚫"
       } else if (s === 403) {
         result.Gemini = "<b>Gemini: </b>访问受限 (403) ⚠️"
@@ -448,15 +441,15 @@ function testGeminiAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 400 = API_KEY_INVALID → 服务可达，仅密钥无效
+      // 400 也可能是 FAILED_PRECONDITION 地区限制，必须优先检查错误正文
       if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
         result.GeminiAPI = "<b>Gemini API: </b>地区受限 🚫"
       } else if (s === 400 || s === 401) {
         result.GeminiAPI = "<b>Gemini API: </b>接口可达 (无效 Key) ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.GeminiAPI = "<b>Gemini API: </b>受限 🚫"
       } else if (s === 403) {
         result.GeminiAPI = "<b>Gemini API: </b>访问受限 (403) ⚠️"
+      } else if (s === 429) {
+        result.GeminiAPI = "<b>Gemini API: </b>限流 (未验证) ⚠️"
       } else if (s === 200) {
         result.GeminiAPI = "<b>Gemini API: </b>接口响应成功 (解锁未证实) ⚠️"
       } else {
@@ -578,9 +571,8 @@ function testYouTube() {
         return
       }
 
-      if (body.indexOf('premium is not available in your country') !== -1 ||
-          body.indexOf('youtube premium is not available') !== -1 ||
-          body.indexOf('not available in your region') !== -1) {
+      // 页面 JS 可能包含限制文案，不能在整页 HTML 中用字符串匹配判定地区封锁。
+      if (s === 451) {
         result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
       } else {
         let region = ''
