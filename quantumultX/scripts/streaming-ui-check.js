@@ -149,8 +149,6 @@ function hasExplicitRegionMessage(body) {
   let text = (body || '').toLowerCase()
   return text.indexOf('user location is not supported') !== -1 ||
     text.indexOf('location is not supported for the api use') !== -1 ||
-    text.indexOf('failed_precondition') !== -1 && /location|region|country/.test(text) ||
-    text.indexOf('unsupported_country') !== -1 ||
     text.indexOf('country not supported') !== -1 ||
     text.indexOf('not available in your country') !== -1 ||
     text.indexOf('not available in your region') !== -1 ||
@@ -159,7 +157,7 @@ function hasExplicitRegionMessage(body) {
 
 function hasApiRegionBlock(body) {
   let text = (body || '').toLowerCase()
-  return /"(?:status|code)"\s*:\s*"(?:failed_precondition|unsupported_country)"/.test(text) && /location|region|country/.test(text) ||
+  return (/"(?:status|code)"\s*:\s*"(?:failed_precondition|unsupported_country)"/.test(text) && /location|region|country/.test(text)) ||
     hasStructuredRegionBlock(text) ||
     hasExplicitRegionMessage(text) ||
     /(?:user )?location[^.]{0,40}(?:not supported|unsupported)/.test(text)
@@ -495,9 +493,10 @@ function testGoogleCN() {
     let body = (resp.body || '').toLowerCase()
     let loc = getHeader(resp.headers, 'location').toLowerCase()
     if (loc.indexOf('google.cn') !== -1 ||
-        loc.indexOf('google.com.cn') !== -1 ||
-loc.indexOf('hl=zh-cn') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>是 (大陆重定向) 🇨🇳⚠️"
+        loc.indexOf('google.com.cn') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>可能 (跳转 Google 中国站) 🇨🇳⚠️"
+    } else if (loc.indexOf('hl=zh-cn') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (语言参数并非地区证据) ⚠️"
     } else if (loc.indexOf('consent.google.') !== -1) {
       result.GoogleCN = "<b>Google 送中: </b>无法判定 (同意页) ⚠️"
     } else if (loc.indexOf('/sorry/') !== -1 || body.indexOf('/sorry/') !== -1) {
@@ -565,16 +564,13 @@ function testYouTube() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      if (s < 200 || s >= 400) {
-        result.YouTube = "<b>YouTube Premium: </b>异常 (" + s + ") ❗️"
-        resolve()
-        return
-      }
-
-      // 页面 JS 可能包含限制文案，不能在整页 HTML 中用字符串匹配判定地区封锁。
+      // 451 必须先于通用 HTTP 错误处理，否则地区限制分支永远无法命中。
       if (s === 451) {
-        result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
+        result.YouTube = "<b>YouTube Premium: </b>地区/法律限制 (451) 🚫"
+      } else if (s < 200 || s >= 400) {
+        result.YouTube = "<b>YouTube Premium: </b>异常 (" + s + ") ❗️"
       } else {
+        // 页面 JS 可能包含限制文案，不能在整页 HTML 中用字符串匹配判定地区封锁。
         let region = ''
         let re = /"(?:gl|innertube_context_gl)":"([a-z]{2})"/
         let ret = re.exec(body)
