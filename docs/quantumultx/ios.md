@@ -81,6 +81,16 @@ udp_drop_list
 
 基础分流不需要 MITM。
 
+原有 iPhone 配置中的个人 Rewrite 已按安全边界审计：16 项列于 [iOS Rewrite 清单与渐进恢复](rewrites.md)，**不会直接从用户上传配置迁移任何证书、私钥或第三方增强脚本**。
+
+模板增加了仅用于 `google.cn` / `www.google.cn` 的自维护可选重定向：
+
+```text
+quantumultX/rewrites/common/google-redirect.conf
+```
+
+当前关闭，HTTPS 启用时需为这两个域名单独配置可信 MITM。
+
 模板中的 HTTPS Rewrite 都默认：
 
 ```text
