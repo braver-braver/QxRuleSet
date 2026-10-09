@@ -295,7 +295,7 @@ function testClaudeAPI() {
       headers: {
         'anthropic-version': '2023-06-01',
         'x-api-key': 'invalid-key-for-reachability-test'
-      })
+      }
     }).then(resp => {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
