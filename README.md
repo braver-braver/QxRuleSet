@@ -14,6 +14,7 @@ QxRuleSet/
 │       ├── ai-rules.md
 │       ├── configuration.md
 │       ├── dependencies.md
+│       ├── diagnostics.md
 │       ├── ios.md
 │       ├── openai.md
 │       ├── rules.md
@@ -72,7 +73,13 @@ QxRuleSet/
     │       └── rewrite-patterns.test.mjs
     ├── scripts/
     │   ├── ai-node-sifter.js
-    │   └── streaming-ui-check.js
+    │   ├── geo-location-checker.js
+    │   ├── geo-query.js
+    │   ├── node-reputation.js
+    │   ├── streaming-ui-check.js
+    │   ├── traffic-check.js
+    │   └── tests/
+    │       └── diagnostics.test.mjs
     └── templates/
         └── subscription-normalization.conf.example
 ```
@@ -90,6 +97,7 @@ QxRuleSet/
 - [AI 安全节点筛选](docs/quantumultx/ai-node-sifter.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
+- [诊断脚本（地理位置 / 节点风险 / 流量 / 服务解锁）](docs/quantumultx/diagnostics.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
 - [订阅节点规范化](docs/quantumultx/subscription-normalization.md)
 - [Mihomo / Clash Party（Windows）](docs/mihomo/setup.md)
