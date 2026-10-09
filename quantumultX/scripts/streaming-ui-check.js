@@ -4,7 +4,7 @@
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-09
+ * 更新: 2026-10-09T10:57:33+08:00
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（大陆重定向/强制简体）
