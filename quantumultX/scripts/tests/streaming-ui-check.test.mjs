@@ -66,3 +66,17 @@ test('Disney API 500 is not a region block', async () => {
   const out = await probe()
   assert.ok(out.includes('Disneyᐩ: </b>接口异常 (500)'))
 })
+
+test('YouTube HTTP 451 reports a legal or regional block', async () => {
+  const out = await probe({
+    'www.youtube.com': { statusCode: 451, body: '' }
+  })
+  assert.ok(out.includes('YouTube Premium: </b>地区/法律限制 (451)'))
+})
+
+test('Google language preference is not mainland proof', async () => {
+  const out = await probe({
+    'www.google.com': { statusCode: 302, headers: { location: 'https://www.google.com/?hl=zh-cn' }, body: '' }
+  })
+  assert.ok(out.includes('Google 送中: </b>无法判定 (语言参数并非地区证据)'))
+})
