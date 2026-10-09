@@ -14,23 +14,28 @@ QxRuleSet/
 │       ├── ai-rules.md
 │       ├── configuration.md
 │       ├── dependencies.md
+│       ├── ios.md
 │       ├── openai.md
 │       ├── rules.md
+│       ├── rewrites.md
 │       ├── setup.md
 │       ├── service-rules.md
 │       ├── streaming-ui-check.md
-│       └── subscription-normalization.md
+│       ├── subscription-normalization.md
+│       └── upgrade.md
 ├── homeproxy/
 │   ├── customip.json
 │   └── customsite.json
 ├── mihomo/
 │   ├── clash-party-override.js
-│   └── rules/
-│       ├── claude.yaml
-│       ├── direct.yaml
-│       ├── gemini.yaml
-│       ├── media.yaml
-│       └── openai.yaml
+│   ├── rules/
+│   │   ├── claude.yaml
+│   │   ├── direct.yaml
+│   │   ├── gemini.yaml
+│   │   ├── media.yaml
+│   │   └── openai.yaml
+│   └── tests/
+│       └── override.test.mjs
 └── quantumultX/
     ├── cn.list
     ├── qx-ios.conf
@@ -50,11 +55,21 @@ QxRuleSet/
     │       ├── bing.list
     │       ├── github.list
     │       ├── google.list
+    │       ├── media.list
     │       ├── microsoft.list
     │       ├── social.list
     │       ├── spotify.list
     │       ├── wechat.list
     │       └── youtube.list
+    ├── rewrites/
+    │   ├── apps/
+    │   │   ├── amap-splash.conf
+    │   │   ├── bilibili-splash.conf
+    │   │   └── weibo-ad-preload.conf
+    │   ├── common/
+    │   │   └── google-redirect.conf
+    │   └── tests/
+    │       └── rewrite-patterns.test.mjs
     ├── scripts/
     │   ├── ai-node-sifter.js
     │   └── streaming-ui-check.js
@@ -65,7 +80,10 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [Quantumult X iOS 维护](docs/quantumultx/ios.md)
+- [iOS Rewrite 资产清单与维护](docs/quantumultx/rewrites.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
+- [版本定位与增量升级](docs/quantumultx/upgrade.md)
 - [外部依赖策略](docs/quantumultx/dependencies.md)
 - [Quantumult X 规则维护](docs/quantumultx/rules.md)
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)

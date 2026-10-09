@@ -1,12 +1,13 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.1.1
- * updated: 2026-09-28
+ * version: 0.2.1
+ * updated: 2026-10-08
  *
  * Goal:
  * - keep AI traffic on a node that is actually accepted by the provider
  * - prefer stability over lowest latency
- * - fail closed to "reject" when no verified-safe node is available
+ * - support fail-closed mode and sticky recovery mode
+ * - sticky recovery keeps/restores the last verified node across transient network changes
  *
  * Uses Quantumult X configuration APIs:
  * - get_customized_policy
@@ -25,6 +26,8 @@ const CONCURRENCY = 3
 const TIMEOUT = 7000
 const TRACE_TIMEOUT = 4500
 const FAIL_CLOSED = "reject"
+const PREF_PREFIX = "qxrule.ai-node-sifter."
+// A network event supersedes older checks; settle after the latest event.
 
 const PROVIDERS = {
   openai: {
@@ -74,6 +77,68 @@ function parseArgs() {
     else if (p.indexOf("gemini") >= 0) out.provider = "gemini"
   }
   return out
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)))
+}
+
+function prefKey(provider, suffix) {
+  return PREF_PREFIX + provider + "." + suffix
+}
+
+function loadLastGood(provider) {
+  try {
+    let raw = $prefs.valueForKey(prefKey(provider, "last-good"))
+    let value = raw ? JSON.parse(raw) : null
+    if (!value || !value.node) return null
+    return value
+  } catch (_) {
+    return null
+  }
+}
+
+function saveLastGood(provider, result) {
+  if (!result || result.status !== "pass" || !result.node) return false
+  try {
+    return $prefs.setValueForKey(JSON.stringify({
+      node: result.node,
+      region: result.region || "",
+      verifiedAt: Date.now()
+    }), prefKey(provider, "last-good"))
+  } catch (_) {
+    return false
+  }
+}
+
+function recordNetworkEvent(provider) {
+  // All simultaneous QX task invocations share $prefs, not JS globals.
+  // A fresh token ensures the most recent network change wins even if two
+  // events arrive in the same millisecond.
+  let token = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)
+  try {
+    if ($prefs.setValueForKey(token, prefKey(provider, "network-event")) === false) return ""
+  } catch (_) {
+    return ""
+  }
+  return token
+}
+
+function isLatestNetworkEvent(provider, token) {
+  if (!token) return true // Persistence unavailable: run without coalescing.
+  try {
+    return $prefs.valueForKey(prefKey(provider, "network-event")) === token
+  } catch (_) {
+    return true
+  }
+}
+
+function isStickyMode(args) {
+  return String((args && args.mode) || "").toLowerCase() === "sticky"
+}
+
+function isNetworkRun(args) {
+  return String((args && args.trigger) || "").toLowerCase() === "network"
 }
 
 function qx(action, content) {
@@ -381,7 +446,12 @@ function chooseBest(cfg, safe, latency, stickyRegion) {
   })[0]
 }
 
-async function setPolicy(policy, target) {
+async function setPolicy(policy, target, args) {
+  // Do not let a superseded network check overwrite a newer selection.
+  if (args && isNetworkRun(args) &&
+      !isLatestNetworkEvent(String(args.provider || "").toLowerCase(), args.networkToken)) {
+    return false
+  }
   return qx("set_policy_state", { [policy]: target })
 }
 
@@ -416,9 +486,20 @@ function isScheduledRun() {
   return t === "0" || t === "-1"
 }
 
-async function finish(cfg, action, selected, results, latency) {
-  if (isScheduledRun()) {
-    if (action.indexOf("保持") < 0) {
+function isBackgroundRun(args) {
+  return isScheduledRun() || isNetworkRun(args || parseArgs())
+}
+
+async function finish(cfg, action, selected, results, latency, args) {
+  if (isNetworkRun(args) &&
+      !isLatestNetworkEvent(String(args.provider || "").toLowerCase(), args.networkToken)) {
+    $done() // A later network event owns recovery and notification.
+    return
+  }
+  if (isBackgroundRun(args)) {
+    // Healthy checks and successful last-good restoration stay quiet.
+    // Uncertainty, confirmed failure and fallback/switch events notify.
+    if (action.indexOf("仍安全") < 0 && action.indexOf("已恢复上次验证通过") < 0) {
       $notify("AI 安全节点 · " + cfg.name, action, selected || FAIL_CLOSED)
     }
     $done()
@@ -436,62 +517,192 @@ async function finish(cfg, action, selected, results, latency) {
   let cfg = PROVIDERS[provider]
   if (!cfg) throw new Error("missing or unsupported provider")
 
+  let sticky = isStickyMode(args)
+
+  if (isNetworkRun(args)) {
+    args.networkToken = recordNetworkEvent(provider)
+    let delaySeconds = Number(args.delay || 5)
+    if (!Number.isFinite(delaySeconds)) delaySeconds = 5
+    delaySeconds = Math.max(0, Math.min(15, delaySeconds))
+    await sleep(delaySeconds * 1000)
+    if (!isLatestNetworkEvent(provider, args.networkToken)) {
+      $done() // The latest event will run its own check after settling.
+      return
+    }
+  }
+
   let policy = cfg.policy
+  let current = await getCurrentLeaf(policy)
   let candidates = await getCandidates(policy)
+  let lastGood = loadLastGood(provider)
+
   if (!candidates.length) {
-    await setPolicy(policy, FAIL_CLOSED)
-    await finish(cfg, "没有候选节点，已 fail-closed", FAIL_CLOSED, [], {})
+    if (!sticky) {
+      await setPolicy(policy, FAIL_CLOSED, args)
+      await finish(cfg, "没有候选节点，已 fail-closed", FAIL_CLOSED, [], {}, args)
+    } else {
+      await finish(cfg, "没有候选节点，保留当前策略并提醒", current || FAIL_CLOSED, [], {}, args)
+    }
     return
   }
 
-  let current = await getCurrentLeaf(policy)
   let currentResult = null
+  let rememberedResult = null
 
-  // Sticky routing: a verified current node stays selected.
+  // Sticky routing: first re-check the currently selected real node.
   if (current && candidates.indexOf(current) >= 0) {
     currentResult = await testNode(provider, current)
+
     if (currentResult.status === "pass") {
-      await finish(cfg, "当前节点仍安全，保持不切换", current, [currentResult], {})
+      if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+        $done()
+        return
+      }
+      saveLastGood(provider, currentResult)
+      await finish(cfg, "当前节点仍安全，保持不切换", current, [currentResult], {}, args)
       return
     }
 
-    // The active node is no longer verified-safe. Fail closed before the full
-    // scan so normal AI traffic cannot continue leaking through that exit.
-    await setPolicy(policy, FAIL_CLOSED)
+    if (sticky && currentResult.status === "uncertain") {
+      // A timeout/DNS/challenge immediately after wake is not proof that the
+      // exit became unsafe. Keep the node selected and ask the user to retry.
+      await finish(
+        cfg,
+        "当前节点暂时无法确认，保留原选择；网络稳定后将再次复核",
+        current,
+        [currentResult],
+        {},
+        args
+      )
+      return
+    }
+
+    if (!sticky) {
+      // Legacy fail-closed mode: stop AI traffic before scanning alternatives.
+      await setPolicy(policy, FAIL_CLOSED, args)
+    }
+  } else if (sticky && lastGood && candidates.indexOf(lastGood.node) >= 0) {
+    // QX may come back from sleep/reload with the static policy on reject.
+    // Test the persisted last-known-good leaf directly, then restore it.
+    rememberedResult = await testNode(provider, lastGood.node)
+
+    if (rememberedResult.status === "pass") {
+      await setPolicy(policy, lastGood.node, args)
+      if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+        $done()
+        return
+      }
+      saveLastGood(provider, rememberedResult)
+      await finish(
+        cfg,
+        "已恢复上次验证通过的节点",
+        lastGood.node,
+        [rememberedResult],
+        {},
+        args
+      )
+      return
+    }
+
+    if (rememberedResult.status === "uncertain") {
+      // Preserve continuity across transient network recovery. This node was
+      // previously verified; restore it, but notify because this run could not
+      // positively re-verify it.
+      await setPolicy(policy, lastGood.node, args)
+      await finish(
+        cfg,
+        "网络状态仍不确定，已恢复上次验证节点；请留意可用性",
+        lastGood.node,
+        [rememberedResult],
+        {},
+        args
+      )
+      return
+    }
   }
 
-  let scanTargets = candidates.filter(x => x !== current)
+  let excluded = {}
+  if (currentResult) excluded[currentResult.node] = true
+  if (rememberedResult) excluded[rememberedResult.node] = true
+
+  let scanTargets = candidates.filter(x => !excluded[x])
   let results = await mapLimit(scanTargets, CONCURRENCY, node => testNode(provider, node))
+  if (rememberedResult) results.unshift(rememberedResult)
   if (currentResult) results.unshift(currentResult)
 
   let safe = results.filter(x => x.status === "pass")
   if (!safe.length) {
-    await setPolicy(policy, FAIL_CLOSED)
-    await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {})
+    if (!sticky) {
+      await setPolicy(policy, FAIL_CLOSED, args)
+      await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {}, args)
+      return
+    }
+
+    // Sticky recovery never converts a transient/confirmed outage into a
+    // permanent reject if a real node is already selected. The user gets a
+    // notification instead and can retry after the network settles.
+    if (current && candidates.indexOf(current) >= 0) {
+      await finish(cfg, "未找到可替代的验证节点，保留原选择并提醒", current, results, {}, args)
+      return
+    }
+
+    // If QX is already on reject and the remembered node was explicitly FAIL,
+    // keep reject rather than restoring a known-bad exit.
+    await finish(cfg, "未找到验证通过的节点，当前保持 reject", FAIL_CLOSED, results, {}, args)
     return
   }
 
   let latency = await benchmark(safe.map(x => x.node))
-  let stickyRegion = currentResult && currentResult.region ? currentResult.region : ""
+  let stickyRegion = ""
+  if (currentResult && currentResult.region) stickyRegion = currentResult.region
+  else if (rememberedResult && rememberedResult.region) stickyRegion = rememberedResult.region
+  else if (lastGood && lastGood.region) stickyRegion = lastGood.region
+
   let best = chooseBest(cfg, safe, latency, stickyRegion)
 
-  await setPolicy(policy, best.node)
-  await finish(cfg, "已切换到验证通过的安全节点", best.node, results, latency)
+  await setPolicy(policy, best.node, args)
+  if (isNetworkRun(args) && !isLatestNetworkEvent(provider, args.networkToken)) {
+    $done()
+    return
+  }
+  saveLastGood(provider, best)
+  await finish(cfg, "已切换到验证通过的安全节点", best.node, results, latency, args)
 })().catch(async e => {
   let args = parseArgs()
   let provider = String(args.provider || "").toLowerCase()
   let cfg = PROVIDERS[provider] || { name: provider || "AI", policy: "" }
-  try {
-    if (cfg.policy) await setPolicy(cfg.policy, FAIL_CLOSED)
-  } catch (_) {}
+  let sticky = isStickyMode(args)
 
-  if (isScheduledRun()) {
-    $notify("AI 安全节点 · " + cfg.name, "筛选脚本异常，已尝试 fail-closed", String(e))
+  if (!sticky) {
+    try {
+      if (cfg.policy) await setPolicy(cfg.policy, FAIL_CLOSED, args)
+    } catch (_) {}
+  }
+
+  let selected = FAIL_CLOSED
+  if (sticky && cfg.policy) {
+    try {
+      selected = (await getCurrentLeaf(cfg.policy)) || FAIL_CLOSED
+    } catch (_) {}
+  }
+
+  if (isBackgroundRun(args)) {
+    $notify(
+      "AI 安全节点 · " + cfg.name,
+      sticky ? "筛选脚本异常，已保留当前选择" : "筛选脚本异常，已尝试 fail-closed",
+      String(e)
+    )
     $done()
   } else {
     $done({
       title: "AI 安全节点 · " + cfg.name,
-      htmlMessage: "<p style='font-family:-apple-system;font-size:large'>脚本异常：<br>" + escapeHtml(e) + "<br><br>已尝试切换到 reject。</p>"
+      htmlMessage: "<p style='font-family:-apple-system;font-size:large'>脚本异常：<br>" +
+        escapeHtml(e) +
+        "<br><br>" +
+        (sticky
+          ? "已保留当前策略：" + escapeHtml(selected)
+          : "已尝试切换到 reject。") +
+        "</p>"
     })
   }
 })

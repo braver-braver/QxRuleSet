@@ -66,6 +66,31 @@ Adblock4limbo.conf
 
 因此基础分流配置不需要 MITM。只有用户主动开启 Rewrite 后，才需要配置并信任 MITM 证书。
 
+### Rewrite 分层维护
+
+- 自维护小型且可独立验证的规则：`quantumultX/rewrites/common/google-redirect.conf`。
+- 特殊 WeatherKit 功能由 NSRingo 上游维护；Adblock4limbo 大型网页广告脚本不在本仓库 Fork。
+- 来自个人手机的第三方 Rewrite 只记录启用状态与可验证的维护信息，**不复制 P12/口令/订阅，也不直接导入默认配置**。
+- 16 项资产与逐项回归方法见 [iOS Rewrite 清单](rewrites.md)。个人增强必须显式选择，不应影响核心路由。
+
+### iRingo WeatherKit
+
+iOS 模板保留：
+
+```text
+NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit.snippet
+```
+
+作为可选 WeatherKit 增强资源，并默认 `enabled=false`。
+
+继续跟随上游的原因：
+
+- Apple WeatherKit API / 数据结构会变化；
+- 该项目需要同步适配 iOS 天气 App；
+- 脚本 bundle 和第三方天气 provider 逻辑更新频率高，不适合在本仓库 fork。
+
+它属于 iOS 18+ optional rewrite，不影响基础分流。启用时需要 MITM，并应评估第三方天气 provider 的位置数据隐私边界。
+
 ### 诊断工具
 
 `[task_local]` 中的以下资源属于人工触发的诊断工具：

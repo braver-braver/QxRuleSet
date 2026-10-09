@@ -16,6 +16,8 @@ quantumultX/qx-ios.conf
 
 两份配置共用同一套 ruleset，但有明确的端侧差异。
 
+**已经有本地配置？** 请先看 [版本定位与增量升级](upgrade.md)。不要用下面的 `cp` 命令覆盖已有的私人订阅、节点选择或 MITM 配置。
+
 ### macOS
 
 macOS 版本会加载：
@@ -32,9 +34,17 @@ iPhone 版本不加载桌面更新 ruleset。
 
 iOS App 更新由 App Store / Apple 服务处理，因此没有必要让手机访问 ChatGPT/Codex Desktop 的 Sparkle appcast。
 
+### iPhone DNS
+
+iPhone 模板默认使用 DoH，并对常见国内服务使用域名级 DoH 映射。正常情况下不需要用户再手工配置 DNS。
+
+当前模板仍以 Quantumult X 1.8.0 正式版为最低兼容基线；如果正在使用 1.8.1 (950+) TestFlight，可以自行实验同一域名多 DoH/DoQ 并发，但不要把 Beta-only 语法加入需要兼容正式版/macOS 的共享配置。
+
 ## 创建私有配置
 
 不要直接把订阅地址或 MITM 私钥写进 Git 跟踪的模板。
+
+以下命令**只适用于首次创建、目标文件不存在的情况**。如文件已存在，先备份并按增量升级指南操作。
 
 建议统一生成实际使用文件：
 
