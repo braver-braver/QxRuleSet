@@ -50,8 +50,14 @@ QxRuleSet/
     │       ├── wechat.list
     │       └── youtube.list
     ├── rewrites/
-    │   └── common/
-    │       └── google-redirect.conf
+    │   ├── apps/
+    │   │   ├── amap-splash.conf
+    │   │   ├── bilibili-splash.conf
+    │   │   └── weibo-ad-preload.conf
+    │   ├── common/
+    │   │   └── google-redirect.conf
+    │   └── tests/
+    │       └── rewrite-patterns.test.mjs
     ├── scripts/
     │   ├── ai-node-sifter.js
     │   └── streaming-ui-check.js
