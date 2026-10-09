@@ -27,6 +27,7 @@
 - `cn.list`
 - `rules/corrections/direct.list`
 - `streaming-ui-check.js`
+- GEO、IP 网络属性与流量查询脚本
 
 这些资源的变化需要经过本仓库审查，避免上游规则突然改变策略优先级。
 
@@ -91,23 +92,16 @@ NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit.snippet
 
 它属于 iOS 18+ optional rewrite，不影响基础分流。启用时需要 MITM，并应评估第三方天气 provider 的位置数据隐私边界。
 
-### 诊断工具
+### 诊断工具：本仓库维护脚本，第三方服务提供数据
 
-`[task_local]` 中的以下资源属于人工触发的诊断工具：
+Quantumult X 的 GEO、节点网络属性、策略流量、服务解锁查询均由 `quantumultX/scripts/` 自维护：
 
-- 地理位置检测
-- 节点纯净度查询
-- 策略流量查询
+- `ipwho.is`：HTTPS IP 地理与 ASN/ISP；无 API Key，免费接口有限流，**不提供完整安全/风险数据**。
+- `IP2Location.io`：免 Key HTTPS 查询，免费层只有有限的开放代理信号；不能作为住宅 IP 或“纯净度”的证明。
+- `Cloudflare Trace`：手动 GEO 查询的 IP/地区备用信号，不提供城市/ASN。
+- `get_traffic_statistics`：仅从 QX 本地配置接口读取流量，不上传。
 
-它们不可用时，不影响：
-
-- 节点订阅
-- DNS
-- filter routing
-- policy groups
-- 基础代理能力
-
-因此继续跟随各自上游。
+诊断脚本失效不会影响订阅、DNS、filter routing、节点选择或基础代理。详见 [诊断脚本维护](diagnostics.md)。
 
 ### 图标
 
