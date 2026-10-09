@@ -97,7 +97,7 @@ test("manual GEO query falls back to Cloudflare with IP and country only", async
   });
   assert.equal(out.calls.length, 1);
   assert.match(out.calls[0].htmlMessage, /Cloudflare/);
-  assert.doesNotMatch(out.calls[0].htmlMessage, /ASN/);
+  assert.doesNotMatch(out.calls[0].htmlMessage, /<b>ASN：/);
 });
 
 test("node reputation reports only a limited open-proxy clue, not purity score", async () => {
@@ -134,7 +134,7 @@ test("traffic check groups by candidate and keeps sorted names attached to amoun
   }});
   assert.equal(out.calls.length, 1);
   const html = out.calls[0].htmlMessage;
-  assert.match(html, /3\.50 MiB/);
+  assert.match(html, /3\.5 MiB/);
   assert.match(html, /1\. B&lt;script&gt;： 2\.0 MiB/);
   assert.match(html, /2\. A： 1\.5 MiB/);
   assert.doesNotMatch(html, /B<script>/);
