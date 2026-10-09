@@ -10,7 +10,7 @@
 - **核心分流与所有可选 Rewrite 解耦**：默认无 MITM、无 HTTPS body 脚本。
 - **保留上游**：WeatherKit；Adblock4limbo（仅作为可选资源，默认关闭；注意其大范围 hostname）。
 - **只重写可稳定审计的少量功能**：本仓库新增 `quantumultX/rewrites/common/google-redirect.conf`，默认关闭。
-- **暂不引入**：自托管“指南针定位解锁”、Slidebox Pro、BiliBili/开屏广告去除包等未完成独立实测的功能；它们不属于基础分流配置。
+- **暂不引入**：自托管“指南针定位解锁”、Slidebox Pro 和大规模开屏广告包等未完成独立实测的功能。BiliBili、微博、高德仅新增**单接口实验模块**，一律默认关闭，不代表已验证生效。
 - **不复制未核实授权的源代码**：对微博/高德/BiliBili，只在实际请求样本、App 版本和授权条件明确后重新实现最小拦截或 JSON 净化。
 
 ## 旧版 16 项清单
@@ -23,10 +23,10 @@
 | 指南针定位解锁 | 已开启 | 私有/自托管规则未独立获取内容 | 暂缓；不收入公共模板 |
 | iRingo WeatherKit | 已开启 | 官方 GitHub release / snippet 仍维护 | 保留上游；模板默认关闭 |
 | Slidebox 会员增强 | 已开启 | 单独 `.js` 放在 `rewrite_remote`；自托管内容未核验；解析器可能不识别独立 JS | 暂缓；检查 QX 解析日志；不导入 |
-| BiliBiliAdsLite | 已开启 | 第三方自托管包内容未独立核验 | 暂缓；按 App 版本实测 |
+| BiliBiliAdsLite | 已开启 | 第三方自托管包内容未独立核验 | 不搬入旧包；仅提供独立的 splash/show 单接口实验模块 |
 | StartUpAds 开屏净化 | 已开启 | 第三方自托管包内容未独立核验 | 暂缓；逐 App 实测 |
-| 微博净化 | 已开启 | `ddgksf2013/Rewrite/AdBlock/WeiboAds.conf` 存在；2025-12 更新 | 可试；暂不 Fork 大型脚本 |
-| 高德地图净化 | 已开启 | `ddgksf2013/Rewrite/AdBlock/AmapAds.conf` 存在；外部 JS 含混淆实现 | 可试；不直接复制混淆脚本 |
+| 微博净化 | 已开启 | `ddgksf2013/Rewrite/AdBlock/WeiboAds.conf` 存在；2025-12 更新 | 不 Fork 大脚本；仅提供 ad/preload 单接口实验模块 |
+| 高德地图净化 | 已开启 | `ddgksf2013/Rewrite/AdBlock/AmapAds.conf` 存在；外部 JS 含混淆实现 | 不复制混淆脚本；仅提供 splash_screen 单接口实验模块 |
 | Google 中国域名跳转 | 已开启 | 简单规则可独立重写和测试 | **自维护**；新模块默认关闭 |
 | Adblock4limbo 网页净化 | 已开启 | 官方仓库 2026-10-06 更新；包含大量非广告站点 hostname | 保留上游，默认关闭；不要无差别 MITM |
 | Spotify 部分 Premium 增强 | 已关闭 | `app2smile/rules/module/spotify.conf` 存在，但服务端/客户端兼容性无法静态证明 | 继续关闭；不列入默认模板 |
@@ -58,6 +58,38 @@ enabled=false
 开启前先检查 Quantumult X 配置证书：需要在当前 iOS 设备生成/安装并信任 **仅供个人本地使用** 的 MITM CA，且 `[mitm]` 的 hostname 包含 `google.cn` 和 `www.google.cn`。不要把证书、P12 或口令加入 Git。
 
 如果只是基础代理/分流，完全不需要启用该 Rewrite，也无需创建 MITM 证书。
+
+## 第二阶段：BiliBili / 微博 / 高德最小 Rewrite（2026-10-09）
+
+新增三个**实验性、仅处理单一类广告端点**的 QX 配置，**没有从第三方资源复制 JS**：
+
+| 模块 | 限定主机名 | 匹配的广告端点 | QX 处理 | 默认状态 |
+| --- | --- | --- | --- | --- |
+| `rewrites/apps/bilibili-splash.conf` | `app.bilibili.com` | `/x/v2/splash/show` | `reject-dict` | 关闭 |
+| `rewrites/apps/weibo-ad-preload.conf` | `api.weibo.cn` | `/<数字>/ad/preload` | `reject-dict` | 关闭 |
+| `rewrites/apps/amap-splash.conf` | `m5.amap.com`、`m5-zb.amap.com` | `/ws/(aos|valueadded)/alimama/splash_screen` | `reject-dict` | 关闭 |
+
+**来源与证据边界**：上述接口路径在公开社区 Rewrite 中已有出现，详见 [WeiboAds.conf](https://github.com/ddgksf2013/Rewrite/blob/master/AdBlock/WeiboAds.conf)、[AmapAds.conf](https://github.com/ddgksf2013/Rewrite/blob/master/AdBlock/AmapAds.conf) 和 [BiliBili 社区规则](https://github.com/Moli-X/Resources/blob/main/Rewrite/Bilibili/AD_Bilibili.conf)。本仓库只根据接口类别重新编写狭窄匹配，不复制第三方 JS、扩大规则范围或宣称对 2026 年的最新版 App 已生效。
+
+它们仅拦截广告预加载/开屏接口，**不会**清理推荐信息流、处理评论区、解锁会员或修改账号权限。只在用户愿意实机验证时手动打开一个模块，避免一次打开三个模块导致问题难以定位。
+
+启用时必须在个人私有配置中自行为相应 host 安装、信任 MITM CA，并只增加该模块说明的 host；公开仓库不能包含证书内容。发生 HTTPS 连接失败、App 卡开屏、无法定位等问题时立即关闭对应模块。
+
+### 回归测试与日志采集
+
+不依赖 npm 包，使用 Node.js 内建测试运行器：
+
+```bash
+node --test quantumultX/rewrites/tests/rewrite-patterns.test.mjs
+```
+
+自动测试只验证规则匹配范围与默认关闭状态，不能证明 iOS App 功能生效。具体实机回归：先记录当前 App 版本（版本号和 build），在测试 Profile 中逐个启用 Rewrite，检查 QX 请求日志实际命中，再完成关闭/开启 A/B 对照。
+
+- **BiliBili**：验证重新启动后广告位置变化，同时检查登录、视频播放、搜索和弹幕。
+- **微博**：验证重新启动后推广位置变化，同时检查登录、主页信息流及发送微博。
+- **高德**：验证重新启动后开屏广告变化，同时检查搜索、当前位置、路线规划、导航和语音播报。
+
+日志只需提供已脱敏的主机名、路径、请求时间和命中动作；绝对不要共享 Cookie、Authorization、定位坐标、完整带 token 的 URL、P12 或 passphrase。
 
 ## 实机验证：分成三个级别
 

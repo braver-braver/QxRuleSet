@@ -97,6 +97,12 @@ quantumultX/rewrites/common/google-redirect.conf
 enabled=false
 ```
 
+### 自维护实验性 App Rewrite
+
+iOS 模板已预留三个默认关闭的开屏/广告预加载模块：BiliBili、微博、高德。它们只匹配各自的一类广告端点，不执行第三方 JS。**尚未确认在你当前的 App 版本生效**。
+
+详细 URL、需要 MITM 的主机名和逐项 A/B 验证方式见 [Rewrite 资产清单](rewrites.md)。
+
 ### Adblock4limbo Rewrite
 
 作为可选网页/HTTPS Rewrite 层保留。
