@@ -1,0 +1,58 @@
+# International news / media
+# version: 0.1.0
+# updated: 2026-10-02
+# Domain-first rules only. Avoid broad shared CDN/IP ranges.
+payload:
+  # BBC
+  - DOMAIN-SUFFIX,bbc.co.uk
+  - DOMAIN-SUFFIX,bbc.com
+  - DOMAIN-SUFFIX,bbc.net.uk
+  - DOMAIN-SUFFIX,bbci.co.uk
+  - DOMAIN-SUFFIX,bbcmedia.co.uk
+  - DOMAIN-SUFFIX,bbcverticals.com
+  - DOMAIN-SUFFIX,bbc-reporting-api.app
+  - DOMAIN-SUFFIX,bbcchinese.com
+  - DOMAIN-SUFFIX,bbcpersian.com
+  - DOMAIN,aod-dash-uk-live.akamaized.net
+  - DOMAIN,aod-hls-uk-live.akamaized.net
+  - DOMAIN,as-dash-uk-live.akamaized.net
+  - DOMAIN,as-hls-uk-live.akamaized.net
+  - DOMAIN,vod-dash-uk-live.akamaized.net
+  - DOMAIN,vod-dash-ww-live.akamaized.net
+  - DOMAIN,vod-hls-uk-live.akamaized.net
+  - DOMAIN,vod-sub-uk-live.akamaized.net
+  - DOMAIN,vod-thumb-uk-live.akamaized.net
+  - DOMAIN,vod-thumb-ww-live.akamaized.net
+  - DOMAIN,vs-cmaf-push-uk-live.akamaized.net
+
+  # Singapore / regional Asia
+  - DOMAIN-SUFFIX,zaobao.com
+  - DOMAIN-SUFFIX,zaobao.com.sg
+  - DOMAIN-SUFFIX,channelnewsasia.com
+  - DOMAIN-SUFFIX,straitstimes.com
+  - DOMAIN-SUFFIX,businesstimes.com.sg
+  - DOMAIN-SUFFIX,scmp.com
+
+  # Japan
+  - DOMAIN-SUFFIX,nikkei.co.jp
+  - DOMAIN-SUFFIX,nikkei.com
+  - DOMAIN-SUFFIX,nikkei.jp
+
+  # Global / US / UK business and general news
+  - DOMAIN-SUFFIX,reuters.com
+  - DOMAIN-SUFFIX,reutersmedia.net
+  - DOMAIN-SUFFIX,apnews.com
+  - DOMAIN-SUFFIX,bloomberg.com
+  - DOMAIN-SUFFIX,bloomberg.net
+  - DOMAIN-SUFFIX,ft.com
+  - DOMAIN-SUFFIX,economist.com
+  - DOMAIN-SUFFIX,theguardian.com
+  - DOMAIN-SUFFIX,nytimes.com
+  - DOMAIN-SUFFIX,nyt.com
+  - DOMAIN-SUFFIX,nytco.com
+  - DOMAIN-SUFFIX,wsj.com
+  - DOMAIN-SUFFIX,cnn.com
+  - DOMAIN-SUFFIX,aljazeera.com
+  - DOMAIN-SUFFIX,dw.com
+  - DOMAIN-SUFFIX,france24.com
+  - DOMAIN-SUFFIX,rfi.fr

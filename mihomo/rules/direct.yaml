@@ -1,0 +1,47 @@
+# Conservative direct-routing corrections
+# version: 0.1.0
+# updated: 2026-10-02
+payload:
+  - DOMAIN,sp0.baidu.com
+  - DOMAIN-SUFFIX,baidustatic.com
+  - DOMAIN-SUFFIX,e.kuaishou.com
+  - DOMAIN-SUFFIX,kuaishou.com
+  - DOMAIN-SUFFIX,yximgs.com
+  - DOMAIN-SUFFIX,ksapisrv.com
+  - DOMAIN-SUFFIX,iwx.mail.qq.com
+  - DOMAIN,ctc.qzs.qzone.qq.com
+  - DOMAIN-SUFFIX,dl.op.wpscdn.cn
+  - DOMAIN,mo.res.wpscdn.cn
+  - DOMAIN-SUFFIX,17u.cn
+  - DOMAIN-SUFFIX,40017.cn
+  - DOMAIN,short-video.kakamobi.cn
+  - DOMAIN-SUFFIX,apoll.m.taobao.com
+  - DOMAIN-SUFFIX,acs.m.taobao.com
+  - DOMAIN-SUFFIX,tophub.app
+  - DOMAIN,aw-s.tripcdn.com
+  - DOMAIN-SUFFIX,trip.com
+  - DOMAIN,www.cmpassport.com
+  - DOMAIN,verify.cmpassport.com
+  - DOMAIN,rcs.cmpassport.com
+  - DOMAIN,app.chat.xiaomi.net
+  - DOMAIN,get.sogou.com
+  - DOMAIN,a.stat.xiaomi.com
+  - DOMAIN-SUFFIX,snssdk.com
+  - DOMAIN-SUFFIX,bytedance.com
+  - DOMAIN-SUFFIX,byteimg.com
+  - DOMAIN,api.iplay.163.com
+  - DOMAIN,ac.dun.163yun.com
+  - DOMAIN,count.mail.163.com
+  - DOMAIN,amdc.alipay.com
+  - DOMAIN,gia.jd.com
+  - DOMAIN,img-x.jd.com
+  - DOMAIN,policy.jd.com
+  - DOMAIN-SUFFIX,d.meituan.net
+  - DOMAIN-SUFFIX,codexcn.com
+  - DOMAIN,sub.cucloud.top
+
+  # WeChat / Weixin
+  - DOMAIN-SUFFIX,wechat.com
+  - DOMAIN-SUFFIX,weixin.qq.com
+  - DOMAIN-SUFFIX,weixin.com
+  - DOMAIN-SUFFIX,tenpay.com
