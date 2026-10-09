@@ -1,6 +1,6 @@
 // QxRuleSet - Clash Party / Mihomo override
-// version: 0.1.0
-// updated: 2026-10-02
+// version: 0.2.0
+// updated: 2026-10-09
 //
 // Intended for Clash Party on Windows using the regular Mihomo core.
 // Subscription URLs and proxy nodes remain managed by Clash Party.
@@ -15,27 +15,29 @@ const NODE_EXCLUDE =
   "(?i)(NeteaseMusic|网易云|免费|白嫖|官网|剩余|套餐|流量|到期|注册|重置|刷新|付费|网址|群|帐户|账户|Traffic|Expire|Expiry|Subscription)";
 
 const REGION = {
-  HK: "(?i)(🇭🇰|香港|Hong Kong|HKG|\\bHK\\b)",
-  TW: "(?i)(🇹🇼|🇨🇳|台湾|台灣|Taiwan|TPE|\\bTW\\b)",
-  JP: "(?i)(🇯🇵|日本|Japan|NRT|HND|KIX|\\bJP\\b)",
-  SG: "(?i)(🇸🇬|新加坡|狮城|獅城|Singapore|SIN|\\bSG\\b)",
-  KR: "(?i)(🇰🇷|韩国|韓國|首尔|首爾|Korea|Seoul|KOR|\\bKR\\b)",
-  US: "(?i)(🇺🇸|美国|美國|United States|USA|LAX|SJC|SFO|SEA|JFK|IAD|\\bUS\\b)",
+  HK: "(?i)(🇭🇰|香港|Hong Kong|\\bHKG\\b|\\bHK\\b)",
+  TW: "(?i)(🇹🇼|台湾|台灣|Taiwan|\\bTPE\\b|\\bTW\\b)",
+  JP: "(?i)(🇯🇵|日本|Japan|\\b(?:NRT|HND|KIX|JP)\\b)",
+  SG: "(?i)(🇸🇬|新加坡|狮城|獅城|Singapore|\\bSIN\\b|\\bSG\\b)",
+  KR: "(?i)(🇰🇷|韩国|韓國|首尔|首爾|Korea|Seoul|\\bKOR\\b|\\bKR\\b)",
+  US: "(?i)(🇺🇸|美国|美國|United States|\\bUSA\\b|\\b(?:LAX|SJC|SFO|SEA|JFK|IAD|US)\\b)",
   GB: "(?i)(🇬🇧|英国|英國|United Kingdom|Britain|London|伦敦|倫敦|\\bUK\\b|\\bGB\\b)",
 };
 
+// Keep AI region qualification consistent with the individual region groups.
 const AI_REGION =
-  "(?i)(🇺🇸|美国|美國|United States|USA|LAX|SJC|SFO|SEA|JFK|IAD|\\bUS\\b|" +
-  "🇬🇧|英国|英國|United Kingdom|Britain|London|伦敦|倫敦|\\bUK\\b|\\bGB\\b|" +
-  "🇯🇵|日本|Japan|NRT|HND|KIX|\\bJP\\b|" +
-  "🇸🇬|新加坡|狮城|獅城|Singapore|SIN|\\bSG\\b)";
+  "(?i)(?:" +
+  ["US", "GB", "JP", "SG"]
+    .map((region) => REGION[region].replace(/^\(\?i\)/, ""))
+    .join("|") +
+  ")";
 
 function urlTest(name, filter, extra = {}) {
   return Object.assign(
     {
       name,
       type: "url-test",
-      "include-all-proxies": true,
+      "include-all": true,
       filter,
       "exclude-filter": NODE_EXCLUDE,
       "exclude-type": "Direct|Reject|Compatible",
@@ -64,7 +66,7 @@ function select(name, proxies, extra = {}) {
   );
 }
 
-function customRuleProvider(file) {
+function customRuleProvider(file, bootstrapGroup) {
   return {
     type: "http",
     behavior: "classical",
@@ -72,12 +74,23 @@ function customRuleProvider(file) {
     path: `./ruleset/qxr-${file}.yaml`,
     url: `${RULE_BASE}/${file}.yaml`,
     interval: 86400,
-    proxy: "PROXY",
+    proxy: bootstrapGroup,
   };
 }
 
 function main(config) {
   if (!config || typeof config !== "object") return config;
+
+  // Never shadow a subscription's PROXY group: it can back chained nodes.
+  const originalGroups = Array.isArray(config["proxy-groups"])
+    ? config["proxy-groups"]
+    : [];
+  const occupied = new Set(originalGroups.filter((g) => g && typeof g.name === "string").map((g) => g.name));
+  const bootstrapBase = "__QXR_BOOTSTRAP__";
+  let bootstrapGroup = bootstrapBase;
+  for (let n = 1; occupied.has(bootstrapGroup); n += 1) {
+    bootstrapGroup = `__QXR_BOOTSTRAP_${n}__`;
+  }
 
   // Core behavior. Do not set ports or TUN enable state here; Clash Party owns them.
   config.mode = "rule";
@@ -122,8 +135,8 @@ function main(config) {
     "https://doh.pub/dns-query",
   ];
   const foreignDns = [
-    "https://cloudflare-dns.com/dns-query#PROXY",
-    "https://dns.google/dns-query#PROXY",
+    `https://cloudflare-dns.com/dns-query#${bootstrapGroup}`,
+    `https://dns.google/dns-query#${bootstrapGroup}`,
   ];
 
   // Baseline DNS. If Clash Party's DNS takeover/override is enabled, its
@@ -158,10 +171,10 @@ function main(config) {
       "geosite:private": ["system"],
       "geosite:cn": domesticDns,
 
-      "rule-set:openai": foreignDns,
-      "rule-set:claude": foreignDns,
-      "rule-set:gemini": foreignDns,
-      "rule-set:media": foreignDns,
+      "rule-set:qxr_openai": foreignDns,
+      "rule-set:qxr_claude": foreignDns,
+      "rule-set:qxr_gemini": foreignDns,
+      "rule-set:qxr_media": foreignDns,
 
       "geosite:github": foreignDns,
       "geosite:youtube": foreignDns,
@@ -178,7 +191,7 @@ function main(config) {
   // ASCII helper group for rule-provider and foreign DoH bootstrap.
   // Hidden from compatible dashboards.
   const groups = [
-    select("PROXY", ["🚀 默认代理"], { hidden: true }),
+    select(bootstrapGroup, ["🚀 默认代理"], { hidden: true }),
 
     select("🚀 默认代理", [
       "⚡ 自动选择",
@@ -206,7 +219,7 @@ function main(config) {
     {
       name: "🌐 全部节点",
       type: "select",
-      "include-all-proxies": true,
+      "include-all": true,
       "exclude-filter": NODE_EXCLUDE,
       "exclude-type": "Direct|Reject|Compatible",
       "empty-fallback": "REJECT",
@@ -341,9 +354,6 @@ function main(config) {
 
   // Preserve provider-defined groups that do not collide with our group names.
   // This keeps uncommon dialer-proxy / relay-style subscription dependencies intact.
-  const originalGroups = Array.isArray(config["proxy-groups"])
-    ? config["proxy-groups"]
-    : [];
   const managedGroupNames = new Set(groups.map((group) => group.name));
   config["proxy-groups"] = groups.concat(
     originalGroups.filter(
@@ -352,11 +362,11 @@ function main(config) {
   );
 
   config["rule-providers"] = Object.assign({}, config["rule-providers"] || {}, {
-    openai: customRuleProvider("openai"),
-    claude: customRuleProvider("claude"),
-    gemini: customRuleProvider("gemini"),
-    media: customRuleProvider("media"),
-    direct_custom: customRuleProvider("direct"),
+    qxr_openai: customRuleProvider("openai", bootstrapGroup),
+    qxr_claude: customRuleProvider("claude", bootstrapGroup),
+    qxr_gemini: customRuleProvider("gemini", bootstrapGroup),
+    qxr_media: customRuleProvider("media", bootstrapGroup),
+    qxr_direct_custom: customRuleProvider("direct", bootstrapGroup),
   });
 
   // Own the routing order so provider-supplied MATCH/GEOIP rules cannot
@@ -371,12 +381,12 @@ function main(config) {
     "GEOSITE,private,DIRECT",
 
     // Conservative direct corrections before broad service/ads rules.
-    "RULE-SET,direct_custom,DIRECT",
+    "RULE-SET,qxr_direct_custom,DIRECT",
 
     // AI must precede Google and other shared infrastructure.
-    "RULE-SET,openai,🤖 OpenAI",
-    "RULE-SET,claude,🧠 Claude",
-    "RULE-SET,gemini,✨ Gemini",
+    "RULE-SET,qxr_openai,🤖 OpenAI",
+    "RULE-SET,qxr_claude,🧠 Claude",
+    "RULE-SET,qxr_gemini,✨ Gemini",
 
     // Advertising before media/general services.
     "GEOSITE,category-ads-all,REJECT",
@@ -389,7 +399,7 @@ function main(config) {
     "GEOSITE,facebook,💬 社交媒体",
     "GEOSITE,instagram,💬 社交媒体",
     "GEOSITE,discord,💬 社交媒体",
-    "RULE-SET,media,📰 国际媒体",
+    "RULE-SET,qxr_media,📰 国际媒体",
 
     // Developer / platform services.
     "GEOSITE,github,🐙 GitHub",
