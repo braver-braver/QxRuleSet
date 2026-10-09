@@ -1,0 +1,29 @@
+name: Quantumult X script tests
+
+on:
+  pull_request:
+    paths:
+      - 'quantumultX/scripts/**'
+      - '.github/workflows/quantumultx-script-tests.yml'
+  push:
+    branches:
+      - main
+      - 'fix/**'
+    paths:
+      - 'quantumultX/scripts/**'
+      - '.github/workflows/quantumultx-script-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qx-script-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check scripts syntax
+        run: |
+          node --check quantumultX/scripts/streaming-ui-check.js
+          node --check quantumultX/scripts/ai-node-sifter.js
+      - name: Run Quantumult X regression tests
+        run: node --test quantumultX/scripts/tests/*.test.mjs
