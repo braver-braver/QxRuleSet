@@ -40,29 +40,29 @@ test('Gemini FAILED_PRECONDITION at HTTP 400 is region blocked', async () => {
   const out = await probe({
     'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported for the API use."}}' }
   })
-  assert.match(out, /Gemini API: <\\/b>地区受限/)
+  assert.ok(out.includes('Gemini API: </b>地区受限'))
 })
 
 test('invalid API keys are reachable, not verified as usable', async () => {
   const out = await probe()
-  assert.match(out, /OpenAI API: <\\/b>接口可达/)
-  assert.match(out, /Claude API: <\\/b>接口可达/)
-  assert.match(out, /Gemini API: <\\/b>接口可达/)
+  assert.ok(out.includes('OpenAI API: </b>接口可达'))
+  assert.ok(out.includes('Claude API: </b>接口可达'))
+  assert.ok(out.includes('Gemini API: </b>接口可达'))
 })
 
 test('HTTP 200 landing pages do not prove full unlock', async () => {
   const out = await probe({ 'www.netflix.com': { statusCode: 200, body: '<html></html>' } })
-  assert.match(out, /Netflix: <\\/b>样本页可达/)
-  assert.match(out, /YouTube Premium: <\\/b>页面可达/)
-  assert.match(out, /ChatGPT: <\\/b>网页可达/)
+  assert.ok(out.includes('Netflix: </b>样本页可达'))
+  assert.ok(out.includes('YouTube Premium: </b>页面可达'))
+  assert.ok(out.includes('ChatGPT: </b>网页可达'))
 })
 
 test('Hong Kong Google redirect is not mainland evidence', async () => {
   const out = await probe()
-  assert.doesNotMatch(out, /Google 送中: <\\/b>是 \\(大陆重定向\\)/)
+  assert.ok(!out.includes('Google 送中: </b>是 (大陆重定向)'))
 })
 
 test('Disney API 500 is not a region block', async () => {
   const out = await probe()
-  assert.match(out, /Disneyᐩ: <\\/b>接口异常 \\(500\\)/)
+  assert.ok(out.includes('Disneyᐩ: </b>接口异常 (500)'))
 })
