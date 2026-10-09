@@ -21,7 +21,7 @@ Clash Party 的覆写会在机场订阅加载后执行，因此可以：
 1. 保留机场原始节点。
 2. 机场更新后继续自动应用本仓库策略。
 3. 不在仓库里保存订阅 URL、Token 或节点密码。
-4. 使用 Mihomo 的 `include-all-proxies` + `filter` 动态生成地区节点组。
+4. 使用 Mihomo 的 `include-all` + `filter` 动态生成地区节点组。
 
 模板会接管：
 
@@ -157,7 +157,7 @@ Spotify
 Cloudflare DoH
 Google DoH
         ↓
-PROXY
+__QXR_BOOTSTRAP__
         ↓
 🚀 默认代理
 ```
@@ -177,6 +177,17 @@ AliDNS / DNSPod
 - `.local`
 - Windows 时间同步
 - Windows NCSI 网络状态检查
+
+## 与机场原始组共存
+
+- 地区、自动和 AI URL-test 节点组统一启用 `include-all: true`，同时涵盖 `proxies` 和 `proxy-providers`。
+- 不再使用固定名称 `PROXY` 做内部下载组：机场自带 `PROXY` 及其链式代理引用原样保留。
+- 内部组默认叫 `__QXR_BOOTSTRAP__`。如果机场也使用此名称，配置会自动选择带序号的名称，并同步修改境外 DoH 与 Rule Provider 下载出口。
+- 自维护 Rule Provider 使用 `qxr_openai`、`qxr_claude`、`qxr_gemini`、`qxr_media`、`qxr_direct_custom` 等前缀，避免覆盖机场原来的同名资源。
+- 台湾规则不把 `🇨🇳` 当作台湾出口；美国三字码及 AI 地区筛选增加 token 边界，避免 `Overseas-HK` 被错认成 `SEA`。
+- 移除 OpenAI 专用规则中的通用 Cloudflare / Stripe / WorkOS / Sentry 等域名，避免影响其他网站的身份认证与支付。
+
+以上都是静态策略修正，不代表 Mihomo 内核或 Windows TUN 已经经过实机验证。
 
 ## 节点策略
 
@@ -302,7 +313,7 @@ mihomo/rules/media.yaml
 mihomo/rules/direct.yaml
 ```
 
-这些规则通过 `PROXY` 策略更新，避免中国大陆网络下直接访问 GitHub Raw 不稳定。
+这些规则通过内部 `__QXR_BOOTSTRAP__` 策略更新，避免中国大陆网络下直接访问 GitHub Raw 不稳定。
 
 通用平台规则不复制一份到本仓库，而是使用 Mihomo / MetaCubeX geosite：
 
@@ -368,6 +379,16 @@ MATCH → 🚀 默认代理
 - AI 必须在广告和通用 Google 规则前。
 - 国际媒体域名不使用整个 Akamai / Cloudflare / Fastly 共享 CDN。
 
+## 自动化回归
+
+本仓库包含不依赖第三方 npm 包的 Node.js 测试：
+
+```bash
+node --test mihomo/tests/override.test.mjs
+```
+
+测试覆盖内联及 Provider 节点、原有 `PROXY` 保留、内部组同名、地区误匹配和 Rule Provider 引用一致性。Windows Clash Party / Mihomo 内核配置解析及 TUN 联网仍需要在真实设备上验证。
+
 ## Windows 排错
 
 ### TUN 开启后断网
@@ -410,7 +431,7 @@ Tokyo Premium
 模板中的自维护 provider 使用：
 
 ```text
-proxy: PROXY
+proxy: __QXR_BOOTSTRAP__
 ```
 
 因此先确保：
