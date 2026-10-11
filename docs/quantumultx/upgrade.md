@@ -14,6 +14,7 @@
 ```bash
 cd /path/to/QxRuleSet
 git status --short
+git branch --show-current   # 确认当前在 main；不是 main 时不要继续执行下面的 pull
 git fetch origin main
 git log --oneline HEAD..origin/main
 git pull --ff-only origin main
