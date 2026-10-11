@@ -1,5 +1,37 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-10-11 上游变化与本地同步
+
+**上游客户端（不同于本仓库模板）**：
+
+- iOS **App Store 1.8.1** 于 2026-10-07 发布；可选的 **TestFlight 1.9.0 (952)** 于 2026-10-08 公告，适用于 iOS/tvOS/macOS。未安装测试版也无需改变当前基础分流。
+- KOP-XIAO 的 `resource-parser.js` 于 2026-10-09 更新至 `29ef748`；两份 QX 模板均已使用其 `master` 原始 URL，**无需替换 URL**，但必须在客户端刷新解析器缓存。
+- build 950+ 支持分流/Rewrite 行首 `{# note #}` 说明；build 951+ 支持本地/iCloud 资源路径附加 `#` 参数；build 952 提供 `reflected_routes`。本仓库没有默认加入这些可能影响旧版兼容的可选配置。
+- 自维护的服务解锁脚本仍为 **v3.2.0**；其来源 `KOP-XIAO/Scripts/streaming-ui-check.js` 最后提交于 2023-06-30，没有需要复制的新版代码。
+
+**把 GitHub 仓库改动同步到你自己的工作目录**（前提是目录是 Git clone，且已处理本地未提交修改）：
+
+```bash
+cd /path/to/QxRuleSet
+git status --short
+git fetch origin main
+git log --oneline HEAD..origin/main
+git pull --ff-only origin main
+```
+
+`git pull` 只更新该 Git 工作目录，**不会更新 Quantumult X 当前已导入的 Profile**。若工作目录有未提交的自用配置，应先手工备份并比对；不要使用 `git reset --hard` 或直接覆盖 `quantumultX.conf`。
+
+**在 iPhone / Mac 的 QX 客户端完成更新**：
+
+1. 先检查 QX App 版本；是否升级 TestFlight 由你自行决定，稳定配置不要求 952。
+2. 在 QX 配置/资源管理中，**刷新自定义资源解析器**（`resource_parser_url`）及所需远程资源；如果使用的是旧缓存，GitHub 的 `master` 更新不会立即反映。
+3. 重新获取远程 `streaming-ui-check.js`，手动运行「服务解锁查询」确认 v3.2.0 输出；同时核查任务选择的实际策略出口。
+4. 对比仓库的 `qx-ios.conf` / `qx-macos.conf` 与你自己的私有 Profile，**只迁移需要的 section**，不要覆盖订阅 URL、MITM 配置或个人策略。
+5. 如果不使用本地/iCloud 资源路径或自定义注释，**新解析器功能无需修改现有规则**。
+
+源代码：[KOP-XIAO parser commit](https://github.com/KOP-XIAO/QuantumultX/commit/29ef7480402d145396c84082a6f9316fe12931d4)；客户端公告：[@QuanXNews](https://t.me/QuanXNews)。
+
+
 ## 如何查看正在使用的配置版本
 
 从 2026-10-08 起，macOS 和 iOS 模板在文件开头统一写入：
