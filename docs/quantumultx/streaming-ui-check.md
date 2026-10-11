@@ -33,6 +33,10 @@ Quantumult X `event-interaction` 脚本。
 - YouTube Premium
 - Disney+
 
+## 上游维护状态（2026-10-11）
+
+最初参考的 [KOP-XIAO/QuantumultX `streaming-ui-check.js`](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/streaming-ui-check.js) 于 2023-06-30 后暂无新的文件提交。当前 **v3.2.0** 是本仓库独立维护版，与上游不再保持逐行同步；不能直接将上游旧版覆盖现有脚本，否则会丢失 AI 及错误分类修复。解析器的 2026-10-09 上游更新与本脚本是两项不同资源，详见 [外部依赖策略](dependencies.md)。
+
 ## 实现约定
 
 脚本依赖 Quantumult X 提供的运行环境，包括：

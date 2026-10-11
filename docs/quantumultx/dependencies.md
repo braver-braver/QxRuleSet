@@ -30,6 +30,27 @@
 
 这些资源的变化需要经过本仓库审查，避免上游规则突然改变策略优先级。
 
+## 2026-10-11 上游同步基线
+
+已按上游代码与发布消息复核：
+
+| 上游项目 | 最新已核查变动 | 本仓库的处理 |
+| --- | --- | --- |
+| [KOP-XIAO resource-parser.js](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/resource-parser.js) | 2026-10-09，commit [29ef748](https://github.com/KOP-XIAO/QuantumultX/commit/29ef7480402d145396c84082a6f9316fe12931d4) | iOS/macOS 继续指向 `master`，**没有本地源码副本，也不需改 URL**；QX 客户端仍须刷新资源解析器缓存 |
+| [KOP-XIAO streaming-ui-check.js](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/streaming-ui-check.js) | 最后一次该文件提交 2023-06-30 | 不直接覆盖本仓库已独立维护的 `streaming-ui-check.js` v3.2.0 |
+| Quantumult X App | iOS App Store 1.8.1（2026-10-07）；1.9.0（952）TestFlight（2026-10-08，iOS/tvOS/macOS） | 只更新兼容性说明，不把测试版功能强制加入稳定模板 |
+
+解析器的新行为（按客户端版本判断，不等于模板必须改造）：
+
+- **build 950+**：分流/重写规则允许以 `{# note #}` 携带说明；旧版客户端无法使用该行首语法。现有仓库 ruleset 保持不含这类行首说明。
+- **build 951+**：本地或 iCloud 资源路径后的 `#in=...&out=...` 参数可直接交给解析器；旧版仍需按上游原有的资源首行参数约定。
+- **build 952（1.9.0 测试版）**：客户端新增 `reflected_routes` 等功能；目前不是本仓库的必需功能，不应在稳定模板中默认启用。
+- 其他诊断脚本、广告过滤列表、可选 WeatherKit Rewrite 仍保留各自上游地址。本次没有理由将它们整体 Fork 或替换。
+
+> **版本边界**：`QxRuleSet-Template-Version` 是本仓库的配置模板 CalVer，**不是** Quantumult X App 构建号，也不代表已导入设备的私有 Profile 自动更新。动态引用上游的 URL 不代表客户端缓存已经同步。
+
+详见 [版本定位与增量升级](upgrade.md) 中的上游刷新流程。
+
 ## 继续跟随上游
 
 ### 订阅资源解析器
