@@ -92,3 +92,87 @@ test("core routing refers only to namespaced QxRuleSet providers", () => {
     assert.ok(Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:" + name));
   }
 });
+
+test("a single unlabeled subscription node has a usable generic route", () => {
+  const cfg = plain(override.main({
+    proxies: [{ name: "Premium-001", type: "ss", server: "node.invalid", port: 443 }],
+    "proxy-groups": [],
+  }));
+  assert.equal(group(cfg, "🚀 默认代理").proxies[0], "⚡ 自动选择");
+  assert.equal(group(cfg, "⚡ 自动选择")["include-all"], true);
+  for (const name of ["📰 国际媒体", "💬 社交媒体", "🐙 GitHub", "🔎 Bing", "▶️ YouTube"]) {
+    assert.equal(group(cfg, name).proxies[0], "🚀 默认代理", name);
+  }
+  for (const name of ["🤖 OpenAI", "🧠 Claude", "✨ Gemini"]) {
+    assert.ok(group(cfg, name).proxies.includes("🌐 全部节点"), name);
+    assert.notEqual(group(cfg, name).proxies[0], "🌐 全部节点",
+      "AI must not silently bypass region qualification");
+  }
+});
+
+test("airport policy groups and proxy names win collisions", () => {
+  const original = [
+    { name: "🚀 默认代理", type: "select", proxies: ["PROXY"] },
+    { name: "📰 国际媒体", type: "select", proxies: ["PROXY"] },
+    { name: "🤖 OpenAI", type: "select", proxies: ["PROXY"] },
+    { name: "__QXR_BOOTSTRAP_1__", type: "select", proxies: ["PROXY"] },
+    { name: "PROXY", type: "select", proxies: ["DIRECT"] },
+  ];
+  const cfg = plain(override.main({
+    proxies: [
+      { name: "⚡ 自动选择", type: "ss", server: "node.invalid", port: 443 },
+      { name: "__QXR_BOOTSTRAP__", type: "ss", server: "node2.invalid", port: 443 },
+    ],
+    "proxy-groups": original,
+  }));
+  for (const previous of original) assert.deepEqual(group(cfg, previous.name), previous);
+  assert.equal(group(cfg, "QXR · 🚀 默认代理").proxies[0], "QXR · ⚡ 自动选择");
+  assert.equal(group(cfg, "QXR · 📰 国际媒体").proxies[0], "QXR · 🚀 默认代理");
+  assert.equal(group(cfg, "QXR · 🤖 OpenAI").proxies[0], "🤖 OpenAI 自动");
+  assert.equal(group(cfg, "__QXR_BOOTSTRAP_2__").hidden, true);
+  assert.deepEqual(group(cfg, "__QXR_BOOTSTRAP_2__").proxies, ["QXR · 🚀 默认代理"]);
+  assert.equal(cfg.rules.at(-1), "MATCH,QXR · 🚀 默认代理");
+  assert.ok(cfg.rules.includes("RULE-SET,qxr_openai,QXR · 🤖 OpenAI"));
+  assert.ok(cfg.rules.includes("RULE-SET,qxr_media,QXR · 📰 国际媒体"));
+  assert.equal(cfg["rule-providers"].qxr_openai.proxy, "__QXR_BOOTSTRAP_2__");
+  assert.ok(cfg.dns["nameserver-policy"]["rule-set:qxr_openai"][0].endsWith("#__QXR_BOOTSTRAP_2__"));
+});
+
+test("colliding rule provider names remain untouched and references follow aliases", () => {
+  const original = {
+    qxr_openai: { type: "file", path: "./airport-original.yaml" },
+    qxr_openai_1: { type: "file", path: "./airport-backup.yaml" },
+    qxr_media: { type: "http", url: "https://example.invalid/media", path: "./airport-media.yaml" },
+  };
+  const cfg = plain(override.main({ "rule-providers": original }));
+  for (const [name, provider] of Object.entries(original)) {
+    assert.deepEqual(cfg["rule-providers"][name], provider);
+  }
+  assert.equal(cfg["rule-providers"].qxr_openai_2.path, "./ruleset/qxr_openai_2.yaml");
+  assert.equal(cfg["rule-providers"].qxr_media_1.path, "./ruleset/qxr_media_1.yaml");
+  assert.ok(cfg.rules.includes("RULE-SET,qxr_openai_2,🤖 OpenAI"));
+  assert.ok(cfg.rules.includes("RULE-SET,qxr_media_1,📰 国际媒体"));
+  assert.ok(Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:qxr_openai_2"));
+  assert.ok(Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:qxr_media_1"));
+  assert.ok(!Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:qxr_openai"));
+  assert.ok(!Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:qxr_media"));
+});
+
+test("every QXR rule-set and group reference resolves after collisions", () => {
+  const cfg = plain(override.main({
+    "proxy-groups": [{ name: "🔎 Google", type: "select", proxies: ["DIRECT"] }],
+    "rule-providers": { qxr_gemini: { type: "file", path: "./airport.yaml" } },
+  }));
+  const names = new Set(cfg["proxy-groups"].map((entry) => entry.name));
+  for (const rule of cfg.rules) {
+    const fields = rule.split(",");
+    if (fields[0] === "RULE-SET") assert.ok(cfg["rule-providers"][fields[1]], rule);
+    const policy = fields[fields[0] === "MATCH" ? 1 : 2];
+    if (!policy || policy === "DIRECT" || policy === "REJECT") continue;
+    assert.ok(names.has(policy), rule);
+  }
+  for (const providerName of ["qxr_openai", "qxr_claude", "qxr_gemini_1", "qxr_media"]) {
+    assert.ok(Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:" + providerName));
+  }
+  assert.ok(cfg.rules.includes("GEOSITE,google,QXR · 🔎 Google"));
+});
