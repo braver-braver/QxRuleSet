@@ -27,3 +27,28 @@ jobs:
         run: node --check mihomo/clash-party-override.js
       - name: Validate subscription override fixtures
         run: node --test mihomo/tests/*.test.mjs
+
+  mihomo-core-smoke:
+    runs-on: ubuntu-latest
+    needs: mihomo-override-tests
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build synthetic subscription configs (no real credentials)
+        run: node mihomo/tests/build-smoke-config.mjs "$RUNNER_TEMP/mihomo-test"
+      - name: Download pinned official Mihomo and verify release SHA-256
+        env:
+          MIHOMO_RELEASE_URL: https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-compatible-v1.19.32.gz
+          MIHOMO_SHA256: ba3ce607747a07f948fc35780e108a4a7c7f552a38b9bd4d115f313ebcb89c20
+        run: |
+          curl --fail --location --silent --show-error --retry 3 --max-time 90 "$MIHOMO_RELEASE_URL" -o "$RUNNER_TEMP/mihomo.gz"
+          echo "$MIHOMO_SHA256  $RUNNER_TEMP/mihomo.gz" | sha256sum --check
+          gzip --decompress --keep "$RUNNER_TEMP/mihomo.gz"
+          mv "$RUNNER_TEMP/mihomo" "$RUNNER_TEMP/mihomo-cli"
+          chmod 700 "$RUNNER_TEMP/mihomo-cli"
+      - name: Verify inline and provider subscriptions with Mihomo core
+        run: |
+          for fixture in inline provider; do
+            mkdir -p "$RUNNER_TEMP/mihomo-home-$fixture/ruleset"
+            timeout 90s "$RUNNER_TEMP/mihomo-cli" -t -d "$RUNNER_TEMP/mihomo-home-$fixture" -f "$RUNNER_TEMP/mihomo-test/$fixture.yaml"
+          done
