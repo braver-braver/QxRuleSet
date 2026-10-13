@@ -148,7 +148,7 @@ function main(config) {
   // application-level DNS settings have higher priority than this section.
   config.dns = {
     enable: true,
-    listen: "0.0.0.0:1053",
+    listen: "127.0.0.1:1053",
     ipv6: false,
     "cache-algorithm": "arc",
     "enhanced-mode": "fake-ip",
