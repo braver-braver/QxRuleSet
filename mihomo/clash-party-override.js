@@ -1,6 +1,6 @@
 // QxRuleSet - Clash Party / Mihomo override
-// version: 0.2.0
-// updated: 2026-10-09
+// version: 0.3.0
+// updated: 2026-10-13
 //
 // Intended for Clash Party on Windows using the regular Mihomo core.
 // Subscription URLs and proxy nodes remain managed by Clash Party.
@@ -85,7 +85,12 @@ function main(config) {
   const originalGroups = Array.isArray(config["proxy-groups"])
     ? config["proxy-groups"]
     : [];
-  const occupied = new Set(originalGroups.filter((g) => g && typeof g.name === "string").map((g) => g.name));
+  const occupied = new Set([
+    ...originalGroups.filter((g) => g && typeof g.name === "string").map((g) => g.name),
+    ...(Array.isArray(config.proxies) ? config.proxies : [])
+      .filter((node) => node && typeof node.name === "string").map((node) => node.name),
+    ...Object.keys(config["proxy-providers"] || {}),
+  ]);
   const bootstrapBase = "__QXR_BOOTSTRAP__";
   let bootstrapGroup = bootstrapBase;
   for (let n = 1; occupied.has(bootstrapGroup); n += 1) {
@@ -143,7 +148,7 @@ function main(config) {
   // application-level DNS settings have higher priority than this section.
   config.dns = {
     enable: true,
-    listen: "0.0.0.0:1053",
+    listen: "127.0.0.1:1053",
     ipv6: false,
     "cache-algorithm": "arc",
     "enhanced-mode": "fake-ip",
@@ -352,22 +357,85 @@ function main(config) {
     ]),
   ];
 
+  // Unnamed or opaque airport nodes may not match any region regex. Keep
+  // regular traffic working through the generic auto group instead of silently
+  // choosing an empty regional group whose fallback is REJECT.
+  for (const name of ["📰 国际媒体", "💬 社交媒体", "🐙 GitHub",
+                      "🔎 Bing", "▶️ YouTube"]) {
+    const group = groups.find((item) => item.name === name);
+    const index = group.proxies.indexOf("🚀 默认代理");
+    if (index > 0) {
+      group.proxies.splice(index, 1);
+      group.proxies.unshift("🚀 默认代理");
+    }
+  }
+
+  // When AI country tokens are absent, fail closed by default. The user can
+  // explicitly select all nodes after verifying the real exit and account
+  // eligibility; generic HTTP 200 does not prove AI region unlock.
+  for (const name of ["🤖 OpenAI", "🧠 Claude", "✨ Gemini"]) {
+    const group = groups.find((item) => item.name === name);
+    group.proxies.splice(group.proxies.indexOf("REJECT"), 0, "🌐 全部节点");
+  }
+
+  // Preserve all original subscription groups, including common group names
+  // like "🚀 默认代理". Rename only our own colliding group names and
+  // rewrite their internal references. This also protects proxy node names.
+  const groupAliases = new Map();
+  for (const group of groups) {
+    const baseName = group.name;
+    let candidate = baseName;
+    if (occupied.has(candidate)) {
+      candidate = `QXR · ${baseName}`;
+      for (let n = 1; occupied.has(candidate); n += 1) {
+        candidate = `QXR${n} · ${baseName}`;
+      }
+    }
+    occupied.add(candidate);
+    groupAliases.set(baseName, candidate);
+  }
+  for (const group of groups) {
+    group.name = groupAliases.get(group.name);
+    if (Array.isArray(group.proxies)) {
+      group.proxies = group.proxies.map((name) => groupAliases.get(name) || name);
+    }
+  }
+
   // Preserve provider-defined groups that do not collide with our group names.
   // This keeps uncommon dialer-proxy / relay-style subscription dependencies intact.
-  const managedGroupNames = new Set(groups.map((group) => group.name));
-  config["proxy-groups"] = groups.concat(
-    originalGroups.filter(
-      (group) => group && group.name && !managedGroupNames.has(group.name),
-    ),
-  );
+  config["proxy-groups"] = groups.concat(originalGroups);
 
-  config["rule-providers"] = Object.assign({}, config["rule-providers"] || {}, {
-    qxr_openai: customRuleProvider("openai", bootstrapGroup),
-    qxr_claude: customRuleProvider("claude", bootstrapGroup),
-    qxr_gemini: customRuleProvider("gemini", bootstrapGroup),
-    qxr_media: customRuleProvider("media", bootstrapGroup),
-    qxr_direct_custom: customRuleProvider("direct", bootstrapGroup),
-  });
+  // Airport rule provider names (including qxr_*) must not be overwritten.
+  // Keep cache paths unique when namespacing a collision.
+  const originalRuleProviders = config["rule-providers"] || {};
+  const nextRuleProviders = Object.assign({}, originalRuleProviders);
+  const providerAliases = new Map();
+  for (const [originalName, file] of [
+    ["qxr_openai", "openai"], ["qxr_claude", "claude"],
+    ["qxr_gemini", "gemini"], ["qxr_media", "media"],
+    ["qxr_direct_custom", "direct"],
+  ]) {
+    let candidate = originalName;
+    for (let n = 1; Object.hasOwn(nextRuleProviders, candidate); n += 1) {
+      candidate = `${originalName}_${n}`;
+    }
+    const provider = customRuleProvider(file, bootstrapGroup);
+    if (candidate !== originalName) provider.path = `./ruleset/${candidate}.yaml`;
+    nextRuleProviders[candidate] = provider;
+    providerAliases.set(originalName, candidate);
+  }
+  config["rule-providers"] = nextRuleProviders;
+
+  // DNS rule-set selectors must follow the resolved provider names.
+  const namePolicy = config.dns["nameserver-policy"];
+  for (const [oldName, newName] of providerAliases) {
+    if (oldName === newName) continue;
+    const oldKey = `rule-set:${oldName}`;
+    if (Object.hasOwn(namePolicy, oldKey)) {
+      namePolicy[`rule-set:${newName}`] = namePolicy[oldKey];
+      delete namePolicy[oldKey];
+    }
+  }
 
   // Own the routing order so provider-supplied MATCH/GEOIP rules cannot
   // shadow service-specific policies.
@@ -419,6 +487,20 @@ function main(config) {
 
     "MATCH,🚀 默认代理",
   ];
+
+  // Map generated rules to QxRuleSet's resolved group/provider names.
+  // Source subscription groups and nodes keep their original identities.
+  config.rules = config.rules.map((rule) => {
+    const fields = rule.split(",");
+    if (fields[0] === "RULE-SET") {
+      fields[1] = providerAliases.get(fields[1]) || fields[1];
+    }
+    const policyIndex = fields[0] === "MATCH" ? 1 : 2;
+    if (fields[policyIndex]) {
+      fields[policyIndex] = groupAliases.get(fields[policyIndex]) || fields[policyIndex];
+    }
+    return fields.join(",");
+  });
 
   return config;
 }
