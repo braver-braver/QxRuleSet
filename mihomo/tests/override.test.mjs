@@ -37,7 +37,7 @@ test("original PROXY and similarly named groups survive internal bootstrap", () 
   ];
   const cfg = plain(override.main({ "proxy-groups": old }));
   for (const entry of old) assert.deepEqual(group(cfg, entry.name), entry);
-  const internal = cfg["proxy-groups"].filter((x) => x.name.startsWith("__QXR_BOOTSTRAP_"));
+  const internal = cfg["proxy-groups"].filter((x) => x.name.startsWith("__QXR_BOOTSTRAP_") && x.hidden === true);
   assert.equal(internal.length, 1);
   const bootstrap = internal[0].name;
   assert.equal(bootstrap, "__QXR_BOOTSTRAP_1__");
