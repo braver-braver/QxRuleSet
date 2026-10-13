@@ -1,0 +1,29 @@
+name: Mihomo / Clash Party override tests
+
+on:
+  pull_request:
+    paths:
+      - 'mihomo/**'
+      - '.github/workflows/mihomo-override-tests.yml'
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+    paths:
+      - 'mihomo/**'
+      - '.github/workflows/mihomo-override-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mihomo-override-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: node --check mihomo/clash-party-override.js
+      - name: Validate subscription override fixtures
+        run: node --test mihomo/tests/*.test.mjs
