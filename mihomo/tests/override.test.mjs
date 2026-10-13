@@ -88,6 +88,7 @@ test("core routing refers only to namespaced QxRuleSet providers", () => {
   assert.ok(cfg.rules.includes("RULE-SET,qxr_media,📰 国际媒体"));
   assert.ok(cfg.rules.includes("RULE-SET,qxr_direct_custom,DIRECT"));
   assert.equal(cfg.rules.at(-1), "MATCH,🚀 默认代理");
+  assert.equal(cfg.dns.listen, "127.0.0.1:1053", "do not expose a DNS service on all network interfaces");
   for (const name of ["qxr_openai", "qxr_claude", "qxr_gemini", "qxr_media"]) {
     assert.ok(Object.hasOwn(cfg.dns["nameserver-policy"], "rule-set:" + name));
   }
