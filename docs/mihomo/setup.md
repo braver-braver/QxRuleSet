@@ -187,6 +187,8 @@ proxy-server-nameserver
 AliDNS / DNSPod
 ```
 
+DNS 监听限制在本机 `127.0.0.1:1053`，避免无意向局域网开放 DNS 服务；系统代理和 TUN 的开关仍由 Clash Party GUI 负责。实际生效的 DNS 监听地址需以 GUI 生成的最终配置为准。
+
 模板使用 Fake-IP，并对以下内容返回真实 IP：
 
 - private / LAN 域名
