@@ -79,3 +79,35 @@ node --test quantumultX/scripts/tests/streaming-ui-check.test.mjs
 测试使用模拟的 `$task.fetch` 和 Quantumult X 环境，不请求真实代理节点。修改后仍需要在 iOS/macOS Quantumult X 中分别实测典型支持/受限节点，并确认策略组 `$environment.params` 的实际出站路径。
 
 **注意**：现有 Disney+ 检测仍依赖上游设备注册接口，若接口彻底停用，需要重新研究正式接入流程；不要从单次接口失败推断所在地区无法观看。
+
+
+## 2026-10-14 QX 无结果问题修复（v3.3.0）
+
+### 原因与处理
+
+旧版在 `Promise.all` 中等待 **10 项全部检测**，并在它们之后再 `await $configuration.sendMessage`。
+网络超时每项可重复两次，Claude/ChatGPT 的地区探测与 Web 请求还会串行；这可能导致交互任务在 QX 运行窗口内不返回 UI。**已静态定位高风险路径，但具体设备异常仍需 QX 运行日志确认。**
+
+- **8.5 秒全局报告期限**：一旦到期，调用一次 `$done({title, htmlMessage})`，已完成结果照常显示，尚未完成的项目明确标记「未完成（总时限）」，不假装解锁成功或区域不支持。
+- **单项请求限制 2.0–6.2 秒、默认不重试**：不会因慢节点反复叠加 10 秒 HTTP 超时；保留 `$task.fetch` 的 `opts.policy` 以指定出口。内部计时器参数不会传入 QX 请求对象。
+- **Claude/ChatGPT 的地区探测与网页并行**，地区不明时显示「❓」而非猜测国家。
+- **策略链路查询最多等待 0.75 秒**。即使 `$configuration.sendMessage` 永远不返回、同步抛错或 API 不可用，最终报告仍可显示。
+- 空的 `$environment.params` 不会传入 `policy: undefined`，并以「当前分流（未指定策略）」标注，避免把默认路由当成指定节点结果。
+- **幂等完成**：避免超时以后网络请求迟到触发二次 `$done`。
+
+### 回归与排查
+
+```bash
+node --check quantumultX/scripts/streaming-ui-check.js
+node --test quantumultX/scripts/tests/streaming-ui-check.test.mjs
+```
+
+新增模拟 QX 测试覆盖：全部 HTTP 请求永久 pending、部分请求已成功而其余阻塞、策略 API 永久 pending、同步网络错误、晚到响应、空策略参数和 QX 非标准超时字段检查。模拟验证不等于 iOS / macOS 真机验证。
+
+**设备端验证步骤**：
+
+1. QX Tunnel 运行时更新「服务解锁查询」远程脚本缓存；确认加载的是仓库 `main` 的 **v3.3.0**，而非原缓存 v3.2.0。
+2. 从**具体节点**（而非不明确的策略父组）启动交互；正常节点应快速得到完整结果，异常节点应在约 8.5 秒内得到部分结果。
+3. 如结果仍为空，查看 QX 脚本运行日志是代码加载失败、脚本超时还是 `$done` 错误；同时检查节点分流与 DNS。可脱敏分享错误类型/时间，**不要分享订阅链接、MITM 证书或真实 Token**。
+4. 对比 iOS 与 macOS 的 QX 版本和实际导入 Profile；GitHub 更新不会自动更新已缓存的脚本。
+
