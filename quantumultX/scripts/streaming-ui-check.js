@@ -1,13 +1,13 @@
 /***
- * 服务解锁检测 v3.2.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.3.0 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-09
+ * 更新: 2026-10-14
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
- * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（大陆重定向/强制简体）
+ * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
  * ○ 流媒体:   Netflix / YouTube Premium / Disney+
  *
  * For Quantumult-X 598+ ONLY!!
@@ -22,15 +22,17 @@
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 const arrow = " ➟ "
-// Trace/API 请求通常很快，网页和流媒体在移动网络上需要更长时间。
+// 整个 event-interaction 必须在有限时间内交还 UI。
+// 不依赖 QX 默认 HTTP 超时：单项请求在脚本内单独限时，超时不重试。
+// 部分节点可能慢/拒绝连接，返回部分结果优于没有任何界面响应。
+const SCRIPT_DEADLINE_MS = 8500
+const POLICY_LOOKUP_TIMEOUT_MS = 750
 const TIMEOUTS = {
-  trace: 4000,
-  api: 7000,
-  web: 9000,
-  streaming: 10000
+  trace: 2000,
+  api: 4500,
+  web: 5200,
+  streaming: 6200
 }
-const MAX_ATTEMPTS = 2
-const RETRY_DELAY = 600
 
 // --- Claude ---
 const CLAUDE_WEB_URL     = 'https://claude.ai'
@@ -60,8 +62,13 @@ const DISNEY_TOKEN       = 'ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHk
 
 // ===================== QuantumultX 选项 =====================
 
-var opts           = { policy: $environment.params }
-var opts_noRedirect = { policy: $environment.params, redirection: false }
+// 从策略/节点交互菜单调用时 params 为目标策略。
+// 若从其他任务入口运行且没有 params，应回退到当前路由，不能传 policy: undefined。
+const SELECTED_POLICY = String(
+  (typeof $environment !== 'undefined' && $environment && $environment.params) || ''
+).trim()
+var opts           = SELECTED_POLICY ? { policy: SELECTED_POLICY } : {}
+var opts_noRedirect = Object.assign({}, opts, { redirection: false })
 
 // ===================== 国旗映射表 =====================
 
@@ -181,45 +188,45 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
-// Quantumult X 只会在网络层失败时 reject；HTTP 错误仍然会 resolve。
-// 重试只针对可恢复的网络失败，避免对明确的 4xx/5xx 重复请求。
-// 超时在脚本层实现，避免依赖 Quantumult X 未公开的单请求 timeout 行为。
-function fetchWithRetry(request) {
+// HTTP 4xx/5xx 一般以成功 Promise 返回，网络错误会 reject。
+// QX 的单次 HTTP 请求默认超时约 10 秒；这里强制更短的 JS 层上限。
+// request.timeout 是本脚本的内部参数，不能转发为未文档化的 QX 请求字段。
+// 不对每个错误重试，以免一个慢节点把整份交互报告拖过运行期限。
+function fetchWithTimeout(request) {
   return new Promise((resolve, reject) => {
-    let attempt = 0
-    let run = () => {
-      attempt++
-      let settled = false
-      let timer = setTimeout(() => {
-        if (settled) return
-        settled = true
-        retryOrReject(new Error('timeout'))
-      }, request.timeout)
-      let retryOrReject = err => {
-        if (attempt < MAX_ATTEMPTS) {
-          setTimeout(run, RETRY_DELAY * attempt)
-        } else {
-          reject(err)
-        }
-      }
-      $task.fetch(request).then(response => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        resolve(response)
-      }, err => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        retryOrReject(err)
-      })
+    let settled = false
+    const timeout = request.timeout || TIMEOUTS.web
+    const fetchRequest = Object.assign({}, request)
+    delete fetchRequest.timeout
+    const timer = setTimeout(() => settle(new Error('timeout')), timeout)
+
+    function settle(error, response) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve(response)
     }
-    run()
+
+    try {
+      let pending = $task.fetch(fetchRequest)
+      if (!pending || typeof pending.then !== 'function') {
+        settle(new Error('$task.fetch did not return a promise'))
+      } else {
+        pending.then(
+          resp => settle(null, resp),
+          err => settle(err || new Error('network error'))
+        )
+      }
+    } catch (error) {
+      // 部分版本/不合法策略会同步抛错，而非返回 rejected Promise。
+      settle(error)
+    }
   })
 }
 
 function networkErrorLabel(err) {
-  let message = String(err || '').toLowerCase()
+  let message = String((err && (err.error || err.message)) || err || '').toLowerCase()
   if (message.indexOf('timeout') !== -1 || message.indexOf('timed out') !== -1) return '检测超时 🚦'
   if (message.indexOf('dns') !== -1 || message.indexOf('getaddrinfo') !== -1 || message.indexOf('resolve') !== -1) return 'DNS 失败 🚫'
   if (message.indexOf('refused') !== -1 || message.indexOf('reset') !== -1 || message.indexOf('connect') !== -1) return '连接失败 🚫'
@@ -228,7 +235,7 @@ function networkErrorLabel(err) {
 
 async function getRegion(traceUrl) {
   try {
-    let trace = await fetchWithRetry({ url: traceUrl, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    let trace = await fetchWithTimeout({ url: traceUrl, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
     if (trace.statusCode === 200) {
       let region = regionFromTrace(trace.body)
       if (region) return region
@@ -236,7 +243,7 @@ async function getRegion(traceUrl) {
   } catch (e) {}
 
   try {
-    let fallback = await fetchWithRetry({ url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    let fallback = await fetchWithTimeout({ url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
     if (fallback.statusCode === 200) {
       let data = JSON.parse(fallback.body || '{}')
       if (data.country_code) return String(data.country_code).toUpperCase()
@@ -249,15 +256,16 @@ async function getRegion(traceUrl) {
 
 function testClaude() {
   return (async () => {
-    let region = await getRegion(CLAUDE_TRACE_URL)
-    let f = flag(region)
+    // 地区探测和 Web 请求并行，避免两次串行超时阻塞整个脚本。
+    let regionPromise = getRegion(CLAUDE_TRACE_URL)
     try {
-      let resp = await fetchWithRetry({
+      let resp = await fetchWithTimeout({
         url: CLAUDE_WEB_URL,
         opts: opts,
         timeout: TIMEOUTS.web,
         headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
       })
+      let f = flag(await regionPromise)
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
       // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
@@ -286,7 +294,7 @@ function testClaude() {
 
 function testClaudeAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: CLAUDE_API_URL,
       opts: opts,
       timeout: TIMEOUTS.api,
@@ -322,10 +330,10 @@ function testClaudeAPI() {
 
 function testChatGPT() {
   return (async () => {
-    let region = await getRegion(CHATGPT_TRACE_URL)
-    let f = flag(region)
+    let regionPromise = getRegion(CHATGPT_TRACE_URL)
     try {
-      let resp = await fetchWithRetry({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
+      let resp = await fetchWithTimeout({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
+      let f = flag(await regionPromise)
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
       let contentType = getHeader(resp.headers, 'content-type').toLowerCase()
@@ -351,7 +359,7 @@ function testChatGPT() {
 
 function testOpenAIAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: OPENAI_API_URL,
       opts: opts,
       timeout: TIMEOUTS.api,
@@ -387,7 +395,7 @@ function testOpenAIAPI() {
 
 function testGemini() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: GEMINI_WEB_URL,
       opts: opts_noRedirect,
       timeout: TIMEOUTS.web,
@@ -430,7 +438,7 @@ function testGemini() {
 
 function testGeminiAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: GEMINI_API_URL,
       opts: opts,
       timeout: TIMEOUTS.api,
@@ -475,10 +483,10 @@ function testGoogleCN() {
     let resp
     try {
       // 主页响应才能提供地区跳转和页面语言；204 只能作为连通性回退。
-      resp = await fetchWithRetry(Object.assign({ url: GOOGLE_URL }, request))
+      resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_URL }, request))
     } catch (firstError) {
       try {
-        resp = await fetchWithRetry(Object.assign({ url: GOOGLE_NOSSL_URL }, request))
+        resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_NOSSL_URL, timeout: TIMEOUTS.trace }, request))
         if (resp.statusCode === 204) {
           result.GoogleCN = "<b>Google 送中: </b>无法判定 (仅连通) ⚠️"
           return
@@ -517,7 +525,7 @@ function testGoogleCN() {
 
 function testNetflix() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: NETFLIX_URL,
       opts: opts,
       timeout: TIMEOUTS.streaming,
@@ -555,7 +563,7 @@ function testNetflix() {
 
 function testYouTube() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: YOUTUBE_URL,
       opts: opts,
       timeout: TIMEOUTS.streaming,
@@ -593,7 +601,7 @@ function testYouTube() {
 
 function testDisneyPlus() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: DISNEY_API_URL,
       method: 'POST',
       opts: opts,
@@ -687,7 +695,7 @@ function testDisneyPlus() {
 // ===================== 输出构建 =====================
 
 function buildOutput(policyInfo) {
-  let nodeLabel = escapeHtml(policyInfo || $environment.params)
+  let nodeLabel = escapeHtml(policyInfo || SELECTED_POLICY || '当前分流（未指定策略）')
 
   // AI 服务板块
   let aiItems  = [
@@ -716,53 +724,108 @@ function buildOutput(policyInfo) {
 
 // ===================== 主流程 =====================
 
-const message = {
-  action: "get_policy_state",
-  content: $environment.params
+// 所有输出路径共用一个出口，保证最多一次 $done()。
+// 超过全局预算时将未完成项目明确标注，不能把它们误报成「不支持」。
+let reportDone = false
+let reportTimer = null
+let resolvedPolicyPath = ''
+
+function finishReport(deadlineReached) {
+  if (reportDone) return
+  reportDone = true
+  if (reportTimer != null) clearTimeout(reportTimer)
+
+  if (deadlineReached) {
+    for (const key of ['Claude', 'ClaudeAPI', 'ChatGPT', 'OpenAIAPI',
+                       'Gemini', 'GeminiAPI', 'GoogleCN', 'Netflix', 'YouTube', 'Disney']) {
+      result[key] = result[key].replace('检测失败 ❗️', '未完成（总时限）⚠️')
+    }
+  }
+
+  let output
+  try {
+    output = {
+      title: deadlineReached ? '🔍 服务解锁查询（部分结果）' : result.title,
+      htmlMessage: buildOutput(resolvedPolicyPath)
+    }
+  } catch (error) {
+    output = {
+      title: '🔍 服务解锁查询',
+      htmlMessage: '<p>报告生成异常：' + escapeHtml(error) + '</p>'
+    }
+  }
+  $done(output)
+}
+
+// 策略链路是辅助信息，绝对不能阻塞主体诊断结果。
+// 对不提供 $configuration API 的 QX 环境、空策略参数和永久 pending 都安全降级。
+function queryPolicyPath() {
+  return new Promise(resolve => {
+    if (!SELECTED_POLICY || typeof $configuration === 'undefined' ||
+        !$configuration || typeof $configuration.sendMessage !== 'function') {
+      resolve()
+      return
+    }
+
+    let settled = false
+    const timer = setTimeout(() => complete(null), POLICY_LOOKUP_TIMEOUT_MS)
+    function complete(response) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        if (response && response.ret) {
+          let path = response.ret[SELECTED_POLICY]
+          if (Array.isArray(path)) resolvedPolicyPath = path.join(arrow)
+          else if (typeof path === 'string') resolvedPolicyPath = path
+        }
+      } catch (error) {
+        console.log('>>> 策略链路解析失败: ' + error)
+      }
+      resolve()
+    }
+
+    try {
+      Promise.resolve($configuration.sendMessage({
+        action: 'get_policy_state',
+        content: SELECTED_POLICY
+      })).then(complete, () => complete(null))
+    } catch (error) {
+      complete(null)
+    }
+  })
 }
 
 ;(async () => {
-  console.log(">>> 脚本启动, 策略组: " + $environment.params)
+  // 从第一行开始计时：任何网络或 API 卡住均不得让 UI 一直空白。
+  reportTimer = setTimeout(() => finishReport(true), SCRIPT_DEADLINE_MS)
+  console.log('>>> 服务解锁检测启动 (总时限 ' + SCRIPT_DEADLINE_MS + 'ms)')
 
-  // 并发执行所有检测
-  await Promise.all([
-    testClaude(),
-    testClaudeAPI(),
-    testChatGPT(),
-    testOpenAIAPI(),
-    testGemini(),
-    testGeminiAPI(),
-    testGoogleCN(),
-    testNetflix(),
-    testYouTube(),
-    testDisneyPlus()
-  ])
+  let policyTask = queryPolicyPath()
+  const probes = [
+    ['Claude', testClaude],
+    ['ClaudeAPI', testClaudeAPI],
+    ['ChatGPT', testChatGPT],
+    ['OpenAIAPI', testOpenAIAPI],
+    ['Gemini', testGemini],
+    ['GeminiAPI', testGeminiAPI],
+    ['GoogleCN', testGoogleCN],
+    ['Netflix', testNetflix],
+    ['YouTube', testYouTube],
+    ['Disney', testDisneyPlus]
+  ]
 
-  console.log(">>> 全部检测完成")
-  console.log(">>> Claude: " + result.Claude)
-  console.log(">>> ChatGPT: " + result.ChatGPT)
-  console.log(">>> Gemini: " + result.Gemini)
-  console.log(">>> Google送中: " + result.GoogleCN)
+  await Promise.all(probes.map(([name, probe]) =>
+    Promise.resolve().then(probe).catch(error => {
+      console.log('>>> 检测项 ' + name + ' 异常: ' + error)
+      result[name] = result[name].replace('检测失败 ❗️', '检测异常 ⚠️')
+    })
+  ))
+  await policyTask
 
-  // 获取策略组链路信息
-  try {
-    let resolve = await $configuration.sendMessage(message)
-    if (resolve.ret) {
-      let path = resolve.ret[message.content]
-      let output = Array.isArray(path) ? path.join(arrow) : (path || $environment.params)
-      $done({ title: result.title, htmlMessage: buildOutput(output) })
-    } else {
-      $done({ title: result.title, htmlMessage: buildOutput(null) })
-    }
-  } catch (e) {
-    console.log(">>> sendMessage 异常: " + e)
-    $done({ title: result.title, htmlMessage: buildOutput(null) })
-  }
-})().catch(e => {
-  // 全局兜底：无论什么错误都保证 $done 被调用
-  console.log(">>> 脚本全局异常: " + e)
-  $done({
-    title: '🔍 服务解锁查询',
-    htmlMessage: '<p style="text-align:center">脚本执行出错: ' + escapeHtml(e) + '</p>'
-  })
+  console.log('>>> 服务解锁检测完成')
+  finishReport(false)
+})().catch(error => {
+  console.log('>>> 脚本全局异常: ' + error)
+  finishReport(true)
 })
