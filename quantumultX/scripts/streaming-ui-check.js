@@ -486,7 +486,7 @@ function testGoogleCN() {
       resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_URL }, request))
     } catch (firstError) {
       try {
-        resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_NOSSL_URL, timeout: TIMEOUTS.trace }, request))
+        resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_NOSSL_URL }, request, { timeout: TIMEOUTS.trace }))
         if (resp.statusCode === 204) {
           result.GoogleCN = "<b>Google 送中: </b>无法判定 (仅连通) ⚠️"
           return
