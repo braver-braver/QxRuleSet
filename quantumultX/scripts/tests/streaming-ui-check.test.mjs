@@ -80,3 +80,118 @@ test('Google language preference is not mainland proof', async () => {
   })
   assert.ok(out.includes('Google 送中: </b>无法判定 (语言参数并非地区证据)'))
 })
+
+
+// Runtime failure fixtures: unlike the successful HTTP mocks above, these
+// simulate real QX tasks that remain pending, reject or throw synchronously.
+async function probeRuntime(options = {}) {
+  const reports = []
+  const requests = []
+  const policy = options.policy === undefined ? 'TEST-POLICY' : options.policy
+  const environment = policy === null ? {} : { params: policy }
+  const responseOf = options.responseOf || (() => ({ statusCode: 200, headers: {}, body: 'loc=US' }))
+  const timerScale = options.timerScale || (ms => ms)
+  const context = {
+    $environment: environment,
+    $task: {
+      fetch(req) {
+        requests.push(req)
+        const response = responseOf(req)  // may synchronously throw
+        return response && typeof response.then === 'function'
+          ? response
+          : Promise.resolve(response)
+      }
+    },
+    $configuration: options.configuration === undefined
+      ? { sendMessage: async () => ({ ret: { 'TEST-POLICY': ['TEST-POLICY'] } }) }
+      : options.configuration,
+    $done: value => reports.push(value),
+    console: { log() {} },
+    setTimeout: (fn, ms) => setTimeout(fn, timerScale(ms)),
+    clearTimeout,
+    URL
+  }
+  runInNewContext(source, context, { timeout: 2000 })
+  for (let i = 0; i < 120 && reports.length === 0; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  assert.equal(reports.length, 1, 'QX must receive one completed UI response')
+  return { reports, requests }
+}
+
+test('a completely stalled node still returns a partial report by deadline', async () => {
+  const { reports, requests } = await probeRuntime({
+    responseOf: () => new Promise(() => {}),
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 8500 ? 25 : 90
+  })
+  const report = reports[0]
+  assert.match(report.title, /部分结果/)
+  assert.ok(report.htmlMessage.includes('OpenAI API: </b>未完成（总时限）'))
+  assert.ok(report.htmlMessage.includes('Netflix: </b>未完成（总时限）'))
+  assert.ok(!report.htmlMessage.includes('完整支持'))
+  assert.ok(requests.length >= 10)
+  await new Promise(resolve => setTimeout(resolve, 115))
+  assert.equal(reports.length, 1, '$done must not run twice on late request timeout')
+})
+
+test('partial success is retained when other services are stalled', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('api.openai.com')
+      ? { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' }
+      : new Promise(() => {}),
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 8500 ? 25 : 85
+  })
+  const output = reports[0].htmlMessage
+  assert.ok(output.includes('OpenAI API: </b>接口可达 (未认证)'))
+  assert.ok(output.includes('YouTube Premium: </b>未完成（总时限）'))
+})
+
+test('policy-state API hang cannot prevent complete service report', async () => {
+  const { reports } = await probeRuntime({
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 750 ? 20 : ms === 8500 ? 120 : 90
+  })
+  const report = reports[0]
+  assert.ok(!report.title.includes('部分结果'))
+  assert.ok(report.htmlMessage.includes('Claude API: </b>异常 (200)'))
+  assert.ok(report.htmlMessage.includes('节点</b> ➟ TEST-POLICY'))
+})
+
+test('undefined policy parameters fall back to default routing without throwing', async () => {
+  const { reports, requests } = await probeRuntime({
+    policy: null,
+    configuration: undefined
+  })
+  assert.ok(reports[0].htmlMessage.includes('当前分流（未指定策略）'))
+  assert.ok(requests.length >= 10)
+  for (const req of requests) {
+    assert.ok(!Object.hasOwn(req.opts || {}, 'policy'), 'must not send undefined policy')
+    assert.ok(!Object.hasOwn(req, 'timeout'), 'script timeout is not a documented QX fetch parameter')
+  }
+})
+
+test('synchronous $task.fetch failures show service error without blank UI', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => {
+      if (req.url.includes('api.anthropic.com')) throw new Error('invalid proxy policy')
+      return { statusCode: 200, headers: {}, body: 'loc=US' }
+    }
+  })
+  assert.ok(reports[0].htmlMessage.includes('Claude API: </b>网络错误'))
+  assert.ok(reports[0].htmlMessage.includes('OpenAI API: </b>异常 (200)'))
+})
+
+test('a late HTTP response cannot cause a second $done after watchdog', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('www.netflix.com')
+      ? new Promise(resolve => setTimeout(() => resolve({ statusCode: 200, body: '' }), 55))
+      : new Promise(() => {}),
+    timerScale: ms => ms === 8500 ? 25 : 100,
+    configuration: { sendMessage: () => new Promise(() => {}) }
+  })
+  assert.ok(reports[0].htmlMessage.includes('Netflix: </b>未完成（总时限）'))
+  await new Promise(resolve => setTimeout(resolve, 110))
+  assert.equal(reports.length, 1)
+})
