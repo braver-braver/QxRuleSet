@@ -285,3 +285,31 @@ test('QX selftest works with legacy sourcePath #mode=selftest', async () => {
   assert.equal(calls, 0)
   assert.ok(reports[0].htmlMessage.includes('脚本引擎执行成功'))
 })
+
+test('challenge strings on HTTP 200 pages are not proof of bot mitigation', async () => {
+  const out = await probe({
+    'www.disneyplus.com': {
+      statusCode: 200,
+      body: '<html><script>window.cf_chl = "cf-chl-";</script></html>'
+    },
+    'claude.ai': {
+      statusCode: 200,
+      body: '<html><script>const word = "challenge-platform"</script></html>'
+    },
+    'chatgpt.com': {
+      statusCode: 200,
+      body: '<html><script>const word = "checking your browser"</script></html>'
+    }
+  })
+  assert.ok(out.includes('Disneyᐩ: </b>网页可达 (播放未验证)'))
+  assert.ok(out.includes('Claude: </b>网页可达 (解锁未证实)'))
+  assert.ok(out.includes('ChatGPT: </b>网页可达 (解锁未证实)'))
+  const blocked = await probe({
+    'www.disneyplus.com': {
+      statusCode: 403,
+      headers: { 'cf-mitigated': 'challenge' },
+      body: '<html>Checking your browser</html>'
+    }
+  })
+  assert.ok(blocked.includes('Disneyᐩ: </b>验证拦截'))
+})
