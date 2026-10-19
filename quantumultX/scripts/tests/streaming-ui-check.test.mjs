@@ -14,7 +14,7 @@ async function probe(overrides = {}) {
     'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"INVALID_ARGUMENT","message":"API_KEY_INVALID"}}' },
     'www.netflix.com': { statusCode: 404, body: '' },
     'www.youtube.com': { statusCode: 200, body: '<html><title>Premium</title></html>' },
-    'disney.api.edge.bamgrid.com': { statusCode: 500, body: '{}' },
+    'www.disneyplus.com': { statusCode: 200, body: '<html><title>Disney+</title></html>' },
     'www.google.com': { statusCode: 302, headers: { location: 'https://www.google.com.hk/' }, body: '' },
     'ipapi.co': { statusCode: 200, body: '{"country_code":"US"}' }
   }
@@ -62,9 +62,9 @@ test('Hong Kong Google redirect is not mainland evidence', async () => {
   assert.ok(!out.includes('Google 送中: </b>是 (大陆重定向)'))
 })
 
-test('Disney API 500 is not a region block', async () => {
-  const out = await probe()
-  assert.ok(out.includes('Disneyᐩ: </b>接口异常 (500)'))
+test('Disney homepage 500 is not a region block', async () => {
+  const out = await probe({ 'www.disneyplus.com': { statusCode: 500, body: '' } })
+  assert.ok(out.includes('Disneyᐩ: </b>网页异常 (500)'))
 })
 
 test('YouTube HTTP 451 reports a legal or regional block', async () => {
@@ -194,4 +194,94 @@ test('a late HTTP response cannot cause a second $done after watchdog', async ()
   assert.ok(reports[0].htmlMessage.includes('Netflix: </b>未完成（总时限）'))
   await new Promise(resolve => setTimeout(resolve, 110))
   assert.equal(reports.length, 1)
+})
+
+
+test('Disney homepage success and redirects never claim playback eligibility', async () => {
+  const ordinary = await probe()
+  assert.ok(ordinary.includes('Disneyᐩ: </b>网页可达 (播放未验证)'))
+  const redirected = await probe({
+    'www.disneyplus.com': {
+      statusCode: 302, headers: { location: 'https://www.disneyplus.com/login' }, body: ''
+    }
+  })
+  assert.ok(redirected.includes('Disneyᐩ: </b>网页重定向 (播放未验证)'))
+})
+
+test('Disney 403 without explicit region evidence stays indeterminate', async () => {
+  const unknown = await probe({
+    'www.disneyplus.com': { statusCode: 403, body: 'Access Denied' }
+  })
+  assert.ok(unknown.includes('访问受限 (403，原因未明)'))
+  const blocked = await probe({
+    'www.disneyplus.com': {
+      statusCode: 403,
+      body: '{"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported"}}'
+    }
+  })
+  assert.ok(blocked.includes('Disneyᐩ: </b>地区/访问限制 (403)'))
+})
+
+test('Google HTTP 200 is not proof of a non-mainland route', async () => {
+  const out = await probe({
+    'www.google.com': { statusCode: 200, body: '<html lang="en"></html>' }
+  })
+  assert.ok(out.includes('Google 送中: </b>未观察到大陆跳转 (非确定证明)'))
+})
+
+test('shared region fallback makes only one IP API request for two failed traces', async () => {
+  const { reports, requests } = await probeRuntime({
+    responseOf: req => {
+      if (req.url.includes('/cdn-cgi/trace')) return { statusCode: 403, body: '' }
+      if (req.url.includes('ipapi.co/json')) {
+        return { statusCode: 200, body: '{"country_code":"JP"}' }
+      }
+      return { statusCode: 200, headers: {}, body: '' }
+    }
+  })
+  assert.equal(requests.filter(req => req.url.includes('ipapi.co/json')).length, 1)
+  assert.ok(reports[0].htmlMessage.includes('⟦🇯🇵⟧'))
+})
+
+test('malformed HTTP response does not strand API probe or the report', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('api.openai.com')
+      ? null
+      : { statusCode: 200, body: 'loc=US', headers: {} }
+  })
+  assert.ok(reports[0].htmlMessage.includes('OpenAI API: </b>响应格式异常'))
+  assert.ok(!reports[0].title.includes('部分结果'))
+})
+
+test('QX selftest via variables runs without network or policy APIs', async () => {
+  const reports = []
+  let calls = 0
+  runInNewContext(source, {
+    $environment: { params: '<EXAMPLE & NODE>', variables: { mode: 'selftest' } },
+    $task: { fetch: () => { calls++; throw new Error('network must not be used') } },
+    $configuration: { sendMessage: () => { calls++; throw new Error('policy API must not be used') } },
+    $done: value => reports.push(value),
+    console: { log() {} }, setTimeout, clearTimeout
+  })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(reports.length, 1)
+  assert.equal(calls, 0)
+  assert.ok(reports[0].title.includes('引擎自检'))
+  assert.ok(reports[0].htmlMessage.includes('未发起网络请求'))
+  assert.ok(reports[0].htmlMessage.includes('&lt;EXAMPLE &amp; NODE&gt;'))
+})
+
+test('QX selftest works with legacy sourcePath #mode=selftest', async () => {
+  const reports = []
+  let calls = 0
+  runInNewContext(source, {
+    $environment: { params: 'NODE', sourcePath: 'https://example.test/script.js#mode=selftest' },
+    $task: { fetch: () => { calls++; throw new Error('network must not be used') } },
+    $done: value => reports.push(value),
+    console: { log() {} }, setTimeout, clearTimeout
+  })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(reports.length, 1)
+  assert.equal(calls, 0)
+  assert.ok(reports[0].htmlMessage.includes('脚本引擎执行成功'))
 })
