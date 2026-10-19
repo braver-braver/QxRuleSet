@@ -35,7 +35,7 @@ Quantumult X `event-interaction` 脚本。
 
 ## 上游维护状态（2026-10-11）
 
-最初参考的 [KOP-XIAO/QuantumultX `streaming-ui-check.js`](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/streaming-ui-check.js) 于 2023-06-30 后暂无新的文件提交。当前 **v3.2.0** 是本仓库独立维护版，与上游不再保持逐行同步；不能直接将上游旧版覆盖现有脚本，否则会丢失 AI 及错误分类修复。解析器的 2026-10-09 上游更新与本脚本是两项不同资源，详见 [外部依赖策略](dependencies.md)。
+最初参考的 [KOP-XIAO/QuantumultX `streaming-ui-check.js`](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/streaming-ui-check.js) 于 2023-06-30 后暂无新的文件提交。目前的 **v3.x** 系列是本仓库独立维护版，与上游不再保持逐行同步；不能直接将上游旧版覆盖现有脚本，否则会丢失 AI 及错误分类修复。解析器的 2026-10-09 上游更新与本脚本是两项不同资源，详见 [外部依赖策略](dependencies.md)。
 
 ## 实现约定
 
@@ -111,3 +111,33 @@ node --test quantumultX/scripts/tests/streaming-ui-check.test.mjs
 3. 如结果仍为空，查看 QX 脚本运行日志是代码加载失败、脚本超时还是 `$done` 错误；同时检查节点分流与 DNS。可脱敏分享错误类型/时间，**不要分享订阅链接、MITM 证书或真实 Token**。
 4. 对比 iOS 与 macOS 的 QX 版本和实际导入 Profile；GitHub 更新不会自动更新已缓存的脚本。
 
+
+
+## 2026-10-19 脚本维护（v3.4.0）
+
+### 无网络引擎自检
+
+需要确认「解锁查询完全没有弹出窗口」究竟是脚本未加载还是网络检测失败时，可在 QX 的 `[task_local]` 临时加入以下 **第二条** 任务（保留原本的正常解锁查询）：
+
+```ini
+event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs/heads/main/quantumultX/scripts/streaming-ui-check.js#mode=selftest, tag=服务解锁脚本自检, img-url=checkmark.seal.system, enabled=true
+```
+
+它使用 QX 官方支持的远程脚本 `#` 参数机制和 `$environment.variables`（新版本）、`$environment.sourcePath`（旧版本）读取 `mode=selftest`；**不会发起网络请求、不读取订阅凭据、不调用策略组配置 API**。正确运行时会立即显示「✅ QX 脚本引擎执行成功」和当前策略标签。这**不代表节点可以访问任何服务**。
+
+- **自检没有弹窗**：先核对 QX Tunnel、任务启用状态、远程脚本 URL 是否更新成功、脚本缓存和 QX 运行日志；不要据此判断节点被平台封禁。
+- **自检成功但正常查询失败**：重点检查当前节点实际出口、任务日志中的请求错误和 QX 超时。
+- 自检完毕后，**禁用或移除**临时 `#mode=selftest` 任务，正常查询仍使用没有 `#mode` 的 URL。
+- 在 `main` 合并更新后需要 QX 主动刷新远程脚本缓存；仅 GitHub 合并不会刷新设备端缓存。
+
+### 检测准确度与稳健性
+
+- **Disney+**：移除历史设备注册 GraphQL 调用及其内置静态客户端 Token。改用匿名 `https://www.disneyplus.com/` Web 探测，仅报告「网页可达 / 网页重定向 / HTTP 限制 / 网络错误」，**不能证明所在地区已经解锁，更不能证明会员播放正常**。由于过去的 Token / API 可能失效，这一修改有意降低对地区可用性的结论强度。
+- **Google 送中**：HTTP 200/204 仅能表明本次没有观察到中国站跳转，不能断言出口地区一定不在中国大陆。
+- **Claude / ChatGPT 出口归属**：Trace 失败后共用一次备用 `ipapi.co` 查询，减少重复网络请求。备用 IP API 与服务平台自己的地区判定不一定一致。
+- **异常 HTTP 响应**：`$task.fetch` 返回 `null`、缺少状态码或非法状态码时，明确显示「响应格式异常」，不再让 Promise 链路意外悬空。
+- **Cloudflare 人机验证**：优先识别 `cf-mitigated: challenge` 响应头；普通 HTTP 200 页面即使内含 `cf-chl-` 等字符串，也不能据此直接判断正在被验证拦截。
+- **展示兼容性**：输出使用标准 `<br/>` HTML 换行；节点标签仍通过 HTML 转义。
+- **全局超时**：保持 v3.3.0 的 8.5 秒统一看门狗及「仅调用一次 `$done()`」语义。
+
+所有新增验证使用模拟 QX 环境（**无法模拟真实 QX UI / 节点出口 / 账号权限**）。CI 可以证明脚本语法和模拟分支行为正确，不代表脚本在特定 iPhone 或 Mac 上已经完成真实解锁检查。
