@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.3.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.4.0 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-14
+ * 更新: 2026-10-19
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
@@ -57,8 +57,8 @@ const REGION_FALLBACK_URL  = 'https://ipapi.co/json/'
 // --- 流媒体 ---
 const NETFLIX_URL        = 'https://www.netflix.com/title/81280792'
 const YOUTUBE_URL        = 'https://www.youtube.com/premium'
-const DISNEY_API_URL     = 'https://disney.api.edge.bamgrid.com/graph/v1/device/graphql'
-const DISNEY_TOKEN       = 'ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84'
+// Anonymous homepage probe only; no embedded token or playback claims.
+const DISNEY_WEB_URL     = 'https://www.disneyplus.com/'
 
 // ===================== QuantumultX 选项 =====================
 
@@ -69,6 +69,23 @@ const SELECTED_POLICY = String(
 ).trim()
 var opts           = SELECTED_POLICY ? { policy: SELECTED_POLICY } : {}
 var opts_noRedirect = Object.assign({}, opts, { redirection: false })
+
+// #mode=selftest on the QX task URL verifies that the script can execute
+// without depending on proxies, DNS, HTTP endpoints or policy-state APIs.
+function scriptMode() {
+  try {
+    if (typeof $environment === 'undefined' || !$environment) return 'full'
+    const variables = $environment.variables
+    if (variables && typeof variables.mode === 'string') {
+      return variables.mode.toLowerCase() === 'selftest' ? 'selftest' : 'full'
+    }
+    const source = String($environment.sourcePath || '')
+    return /[#&]mode=selftest(?:&|$)/i.test(source) ? 'selftest' : 'full'
+  } catch (_) {
+    return 'full'
+  }
+}
+const SCRIPT_MODE = scriptMode()
 
 // ===================== 国旗映射表 =====================
 
@@ -204,6 +221,19 @@ function fetchWithTimeout(request) {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      if (!error) {
+        // A missing response must reject rather than throw inside a probe's
+        // .then callback and leave the surrounding Promise unresolved.
+        const status = response && Number(response.statusCode)
+        if (!Number.isInteger(status) || status < 100 || status > 599) {
+          error = new Error('invalid HTTP response')
+        } else {
+          response = Object.assign({}, response, {
+            statusCode: status,
+            body: typeof response.body === 'string' ? response.body : ''
+          })
+        }
+      }
       if (error) reject(error)
       else resolve(response)
     }
@@ -227,29 +257,47 @@ function fetchWithTimeout(request) {
 
 function networkErrorLabel(err) {
   let message = String((err && (err.error || err.message)) || err || '').toLowerCase()
+  if (message.indexOf('invalid http response') !== -1) return '响应格式异常 ⚠️'
   if (message.indexOf('timeout') !== -1 || message.indexOf('timed out') !== -1) return '检测超时 🚦'
   if (message.indexOf('dns') !== -1 || message.indexOf('getaddrinfo') !== -1 || message.indexOf('resolve') !== -1) return 'DNS 失败 🚫'
   if (message.indexOf('refused') !== -1 || message.indexOf('reset') !== -1 || message.indexOf('connect') !== -1) return '连接失败 🚫'
   return '网络错误 🚦'
 }
 
+// Two trace checks share one fallback IP API call for the selected policy.
+let fallbackRegionPromise = null
+function getFallbackRegion() {
+  if (!fallbackRegionPromise) {
+    fallbackRegionPromise = (async () => {
+      try {
+        const resp = await fetchWithTimeout({
+          url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace,
+          headers: { 'User-Agent': UA }
+        })
+        if (resp.statusCode !== 200) return ''
+        const data = JSON.parse(resp.body || '{}')
+        const code = String(data.country_code || '').toUpperCase()
+        return /^[A-Z]{2}$/.test(code) ? code : ''
+      } catch (_) {
+        return ''
+      }
+    })()
+  }
+  return fallbackRegionPromise
+}
+
 async function getRegion(traceUrl) {
   try {
-    let trace = await fetchWithTimeout({ url: traceUrl, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    const trace = await fetchWithTimeout({
+      url: traceUrl, opts: opts, timeout: TIMEOUTS.trace,
+      headers: { 'User-Agent': UA }
+    })
     if (trace.statusCode === 200) {
-      let region = regionFromTrace(trace.body)
-      if (region) return region
+      const code = regionFromTrace(trace.body)
+      if (code) return code
     }
-  } catch (e) {}
-
-  try {
-    let fallback = await fetchWithTimeout({ url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
-    if (fallback.statusCode === 200) {
-      let data = JSON.parse(fallback.body || '{}')
-      if (data.country_code) return String(data.country_code).toUpperCase()
-    }
-  } catch (e) {}
-  return ''
+  } catch (_) {}
+  return getFallbackRegion()
 }
 
 // ===================== 检测: Claude Web =====================
@@ -514,7 +562,7 @@ function testGoogleCN() {
     } else if (s >= 300 && s < 400) {
       result.GoogleCN = "<b>Google 送中: </b>重定向异常 ⚠️"
     } else if (s === 204 || (s >= 200 && s < 300)) {
-      result.GoogleCN = "<b>Google 送中: </b>否 ✅"
+      result.GoogleCN = "<b>Google 送中: </b>未观察到大陆跳转 (非确定证明) ✅"
     } else {
       result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
     }
@@ -598,97 +646,35 @@ function testYouTube() {
 }
 
 // ===================== 检测: Disney+ =====================
-
+// The legacy device-registration GraphQL client token cannot reliably prove
+// playback eligibility. Probe the anonymous homepage and describe only the
+// response actually observed; no cookies or account credentials are sent.
 function testDisneyPlus() {
-  return new Promise((resolve) => {
-    fetchWithTimeout({
-      url: DISNEY_API_URL,
-      method: 'POST',
-      opts: opts,
-      timeout: TIMEOUTS.streaming,
-      headers: {
-        'Accept-Language': 'en',
-        'Authorization': DISNEY_TOKEN,
-        'Content-Type': 'application/json',
-        'User-Agent': UA
-      },
-      body: JSON.stringify({
-        query: 'mutation registerDevice($input: RegisterDeviceInput!) { registerDevice(registerDevice: $input) { grant { grantType assertion } } }',
-        variables: {
-          input: {
-            applicationRuntime: 'chrome',
-            attributes: {
-              browserName: 'chrome',
-              browserVersion: '126.0.0',
-              manufacturer: 'apple',
-              model: null,
-              operatingSystem: 'macintosh',
-              operatingSystemVersion: '10.15.7',
-              osDeviceIds: []
-            },
-            deviceFamily: 'browser',
-            deviceLanguage: 'en',
-            deviceProfile: 'macosx'
-          }
-        }
-      })
-    }).then(resp => {
-      let body = (resp.body || '').toLowerCase()
-      if (resp.statusCode === 401) {
-        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403 && hasApiRegionBlock(body)) {
-        result.Disney = "<b>Disneyᐩ: </b>未支持 🚫"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403 && /token|unauthorized|invalid credential/.test(body)) {
-        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403) {
-        result.Disney = "<b>Disneyᐩ: </b>访问受限 (403) ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode !== 200) {
-        result.Disney = "<b>Disneyᐩ: </b>接口异常 (" + resp.statusCode + ") ⚠️"
-        resolve()
-        return
-      }
-
-      try {
-        let data = JSON.parse(resp.body)
-        let sdk = data && data.extensions && data.extensions.sdk
-        if (!sdk) {
-          result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-          resolve()
-          return
-        }
-
-        let session = sdk.session || {}
-        let inSupported = session.inSupportedLocation
-        let region = (session.location && session.location.countryCode) || ''
-        let f = flag(region)
-
-        if (inSupported === false || inSupported === 'false') {
-          result.Disney = "<b>Disneyᐩ: </b>地区不支持" + arrow + "⟦" + f + "⟧ 🚫"
-        } else if (inSupported === true || inSupported === 'true') {
-          result.Disney = "<b>Disneyᐩ: </b>设备接口地区支持 (播放未验证)" + arrow + "⟦" + f + "⟧ ⚠️"
-        } else {
-          result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-        }
-      } catch (e) {
-        result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-      }
-      resolve()
-    }, err => {
-      result.Disney = "<b>Disneyᐩ: </b>" + networkErrorLabel(err)
-      resolve()
-    })
+  return fetchWithTimeout({
+    url: DISNEY_WEB_URL,
+    opts: opts_noRedirect,
+    timeout: TIMEOUTS.streaming,
+    headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
+  }).then(resp => {
+    const status = resp.statusCode
+    const body = (resp.body || '').toLowerCase()
+    if (status === 451 || (status === 403 && hasApiRegionBlock(body))) {
+      result.Disney = "<b>Disneyᐩ: </b>地区/访问限制 (" + status + ") 🚫"
+    } else if (isBotChallenge(resp, body)) {
+      result.Disney = "<b>Disneyᐩ: </b>验证拦截 ⚠️"
+    } else if (status === 403) {
+      result.Disney = "<b>Disneyᐩ: </b>访问受限 (403，原因未明) ⚠️"
+    } else if (status === 429) {
+      result.Disney = "<b>Disneyᐩ: </b>请求限流 (429) ⚠️"
+    } else if (status >= 200 && status < 300) {
+      result.Disney = "<b>Disneyᐩ: </b>网页可达 (播放未验证) ⚠️"
+    } else if (status >= 300 && status < 400) {
+      result.Disney = "<b>Disneyᐩ: </b>网页重定向 (播放未验证) ⚠️"
+    } else {
+      result.Disney = "<b>Disneyᐩ: </b>网页异常 (" + status + ") ⚠️"
+    }
+  }, err => {
+    result.Disney = "<b>Disneyᐩ: </b>" + networkErrorLabel(err)
   })
 }
 
@@ -702,21 +688,21 @@ function buildOutput(policyInfo) {
     result.Claude, result.ClaudeAPI,
     result.ChatGPT, result.OpenAIAPI,
     result.Gemini, result.GeminiAPI
-  ].join('</br></br>')
+  ].join('<br/><br/>')
   // 流媒体板块
-  let mediaItems = [result.Netflix, result.YouTube, result.Disney].join('</br></br>')
+  let mediaItems = [result.Netflix, result.YouTube, result.Disney].join('<br/><br/>')
 
   let content = ''
-  content += '--------------------------------------</br>'
-  content += '<font color=#6C5CE7><b>🤖 AI 服务</b></font></br></br>'
+  content += '--------------------------------------<br/>'
+  content += '<font color=#6C5CE7><b>🤖 AI 服务</b></font><br/><br/>'
   content += aiItems
-  content += '</br></br>--------------------------------------</br>'
-  content += '<font color=#00A86B><b>🌐 Google 网络</b></font></br></br>'
+  content += '<br/><br/>--------------------------------------<br/>'
+  content += '<font color=#00A86B><b>🌐 Google 网络</b></font><br/><br/>'
   content += result.GoogleCN
-  content += '</br></br>--------------------------------------</br>'
-  content += '<font color=#0984E3><b>📺 流媒体</b></font></br></br>'
+  content += '<br/><br/>--------------------------------------<br/>'
+  content += '<font color=#0984E3><b>📺 流媒体</b></font><br/><br/>'
   content += mediaItems
-  content += '</br></br>--------------------------------------</br>'
+  content += '<br/><br/>--------------------------------------<br/>'
   content += '<font color=#CD5C5C><b>节点</b>' + arrow + nodeLabel + '</font>'
 
   return '<p style="text-align: center; font-family: -apple-system; font-size: large; font-weight: thin">' + content + '</p>'
@@ -797,6 +783,18 @@ function queryPolicyPath() {
 }
 
 ;(async () => {
+  if (SCRIPT_MODE === 'selftest') {
+    // If no panel appears, investigate the QX task cache/Tunnel/runtime first.
+    reportDone = true
+    $done({
+      title: '🔍 服务解锁查询 · 引擎自检',
+      htmlMessage: '<p style="text-align:center"><b>✅ QX 脚本引擎执行成功</b><br/>' +
+        '未发起网络请求，也未判断任何服务是否解锁。<br/>' +
+        '当前策略标签：' + escapeHtml(SELECTED_POLICY || '未传入') + '</p>'
+    })
+    return
+  }
+
   // 从第一行开始计时：任何网络或 API 卡住均不得让 UI 一直空白。
   reportTimer = setTimeout(() => finishReport(true), SCRIPT_DEADLINE_MS)
   console.log('>>> 服务解锁检测启动 (总时限 ' + SCRIPT_DEADLINE_MS + 'ms)')
