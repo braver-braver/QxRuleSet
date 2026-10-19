@@ -188,9 +188,16 @@ function hasApiRegionBlock(body) {
 }
 
 function isBotChallenge(resp, body) {
-  let text = (body || '').toLowerCase()
-  return getHeader(resp && resp.headers, 'cf-mitigated').toLowerCase() === 'challenge' ||
-    text.indexOf('challenge-platform') !== -1 ||
+  // A regular HTML bundle can contain Cloudflare challenge strings even on
+  // HTTP 200. Prefer the explicit mitigation header; otherwise only inspect
+  // challenge wording on denial/unavailable responses.
+  if (getHeader(resp && resp.headers, 'cf-mitigated').toLowerCase() === 'challenge') {
+    return true
+  }
+  const status = Number(resp && resp.statusCode)
+  if (status !== 403 && status !== 503) return false
+  const text = (body || '').toLowerCase()
+  return text.indexOf('challenge-platform') !== -1 ||
     text.indexOf('cf-chl-') !== -1 ||
     text.indexOf('checking your browser') !== -1 ||
     text.indexOf('verify you are human') !== -1
@@ -562,7 +569,7 @@ function testGoogleCN() {
     } else if (s >= 300 && s < 400) {
       result.GoogleCN = "<b>Google 送中: </b>重定向异常 ⚠️"
     } else if (s === 204 || (s >= 200 && s < 300)) {
-      result.GoogleCN = "<b>Google 送中: </b>未观察到大陆跳转 (非确定证明) ✅"
+      result.GoogleCN = "<b>Google 送中: </b>未观察到大陆跳转 (非确定证明) ⚠️"
     } else {
       result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
     }
