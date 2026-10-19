@@ -136,6 +136,7 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 - **Google 送中**：HTTP 200/204 仅能表明本次没有观察到中国站跳转，不能断言出口地区一定不在中国大陆。
 - **Claude / ChatGPT 出口归属**：Trace 失败后共用一次备用 `ipapi.co` 查询，减少重复网络请求。备用 IP API 与服务平台自己的地区判定不一定一致。
 - **异常 HTTP 响应**：`$task.fetch` 返回 `null`、缺少状态码或非法状态码时，明确显示「响应格式异常」，不再让 Promise 链路意外悬空。
+- **Cloudflare 人机验证**：优先识别 `cf-mitigated: challenge` 响应头；普通 HTTP 200 页面即使内含 `cf-chl-` 等字符串，也不能据此直接判断正在被验证拦截。
 - **展示兼容性**：输出使用标准 `<br/>` HTML 换行；节点标签仍通过 HTML 转义。
 - **全局超时**：保持 v3.3.0 的 8.5 秒统一看门狗及「仅调用一次 `$done()`」语义。
 
