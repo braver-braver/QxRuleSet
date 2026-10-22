@@ -1,0 +1,32 @@
+name: Quantumult X policy failover checks
+
+on:
+  pull_request:
+    paths:
+      - 'quantumultX/qx-ios.conf'
+      - 'quantumultX/qx-macos.conf'
+      - 'quantumultX/tests/**'
+      - '.github/workflows/quantumultx-policy-tests.yml'
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+    paths:
+      - 'quantumultX/qx-ios.conf'
+      - 'quantumultX/qx-macos.conf'
+      - 'quantumultX/tests/**'
+      - '.github/workflows/quantumultx-policy-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Quantumult X policy tree and failover defaults
+        run: node --test quantumultX/tests/policy-failover.test.mjs
