@@ -73,13 +73,13 @@ for (let i = 0; i < files.length; i++) {
 
     const pattern = policyRegex(pool);
     const positives = [
-      "🇭🇰 香港 01", "🇹🇼 台湾01", "JP-Tokyo-03",
+      "🇭🇰 香港 01", "🇹🇼 台湾01", "🇨🇳 台湾-02", "JP-Tokyo-03",
       "🇸🇬 新加坡-02", "KR-Seoul-01", "US-01", "🇬🇧 UK-London"
     ];
     for (const node of positives) assert.ok(pattern.test(node), "missing valid region: " + node);
     const negatives = [
       "US-剩余流量", "到期重置套餐JP", "官网US注册",
-      "NeteaseMusic-JP", "Premium-001", "BUSINESS Plan", "免费-HK"
+      "NeteaseMusic-JP", "Premium-001", "BUSINESS Plan", "免费-HK", "🇨🇳 上海线路"
     ];
     for (const node of negatives) assert.ok(!pattern.test(node), "invalid fallback node: " + node);
   });
