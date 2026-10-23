@@ -84,6 +84,47 @@ for (let i = 0; i < files.length; i++) {
     for (const node of negatives) assert.ok(!pattern.test(node), "invalid fallback node: " + node);
   });
 
+  test(platform + ": cross-region English labels accept every letter case", () => {
+    const pattern = policyRegex(groupOf(model, BACKUP, "available"));
+    const labels = [
+      "HK", "HKG", "Hong Kong", "TW", "Taiwan", "JP", "Japan",
+      "SG", "Singapore", "KR", "Korea", "US", "USA", "United States",
+      "UK", "GB", "United Kingdom"
+    ];
+    for (const label of labels) {
+      const mixed = [...label].map((c, i) => i % 2 ? c.toLowerCase() : c.toUpperCase()).join("");
+      for (const variant of [label.toLowerCase(), label.toUpperCase(), mixed]) {
+        assert.ok(pattern.test(variant + "-01"), "missing case variant: " + variant);
+        for (const metadata of ["NeteaseMusic", "Netease", "网易云", "免费", "白嫖",
+          "官网", "剩余", "套餐", "注册", "重置", "刷新", "付费", "网址", "群",
+          "帐户", "到期", "流量"]) {
+          assert.ok(!pattern.test(metadata + "-" + variant), "metadata before region: " + metadata);
+          assert.ok(!pattern.test(variant + "-" + metadata), "metadata after region: " + metadata);
+        }
+      }
+    }
+    for (const nonRegion of ["business-01", "hkgateway-01", "sgpremium-01", "🇨🇳 上海线路"]) {
+      assert.ok(!pattern.test(nonRegion), "region boundary widened: " + nonRegion);
+    }
+  });
+
+  // Candidate-order model only: QX request triggers and reachability need device tests.
+  test(platform + ": lowercase-only subscription retains ordered failover candidates", () => {
+    const pattern = policyRegex(groupOf(model, BACKUP, "available"));
+    const subscription = ["singapore-剩余流量", "singapore-01", "japan-01", "us-01", "官网-us"];
+    const eligible = subscription.filter(tag => pattern.test(tag));
+    assert.deepEqual(eligible, ["singapore-01", "japan-01", "us-01"]);
+    const healthy = new Set(eligible);
+    const firstHealthy = () => eligible.find(tag => healthy.has(tag));
+    assert.equal(firstHealthy(), "singapore-01");
+    healthy.delete("singapore-01");
+    assert.equal(firstHealthy(), "japan-01");
+    healthy.delete("japan-01");
+    assert.equal(firstHealthy(), "us-01");
+    healthy.clear();
+    assert.equal(firstHealthy(), undefined, "no synthetic direct/proxy fallback");
+  });
+
   test(platform + ": active benchmarks update every five minutes without idle polling", () => {
     const groups = [...model.groups.entries()].filter(([, v]) => v.type === "url-latency-benchmark");
     assert.equal(groups.length, 9, "expected nine existing benchmark groups");
@@ -122,8 +163,20 @@ for (let i = 0; i < files.length; i++) {
     assert.equal(candidates(groupOf(model, "苹果服务", "static"))[0], "direct");
     assert.equal(candidates(groupOf(model, "AppleTV服务", "static"))[0], "🇺🇸 美国顺选·健康");
     for (const [name, expected] of AI_POLICY_DEFAULTS) {
-      assert.deepEqual(candidates(groupOf(model, name, "static")).slice(0, expected.length),
+      assert.deepEqual(candidates(groupOf(model, name, "static")),
         expected, "AI fail-closed policy modified: " + name);
+    }
+  });
+
+  test(platform + ": AI region filters stay isolated from the ordinary cross-region pool", () => {
+    for (const name of ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"]) {
+      const pattern = policyRegex(groupOf(model, name, "static"));
+      for (const tag of ["US-01", "UK-01", "JP-01", "SG-01"]) {
+        assert.ok(pattern.test(tag), "AI allowed region missing: " + name + " / " + tag);
+      }
+      for (const tag of ["HK-01", "TW-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"]) {
+        assert.ok(!pattern.test(tag), "AI isolation widened: " + name + " / " + tag);
+      }
     }
   });
 
@@ -138,6 +191,8 @@ for (let i = 0; i < files.length; i++) {
       if (policy.type === "static") {
         for (const target of candidates(policy)) {
           assert.notEqual(target, name, "policy references itself: " + name);
+          assert.ok(model.groups.has(target) || ["direct", "proxy", "reject"].includes(target),
+            "unresolved policy reference: " + name + " -> " + target);
           if (model.groups.has(target)) visit(target);
         }
       }
