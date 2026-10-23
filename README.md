@@ -80,6 +80,7 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [Quantumult X 节点自动故障恢复（第一阶段）](docs/quantumultx/failover.md)
 - [Quantumult X iOS 维护](docs/quantumultx/ios.md)
 - [iOS Rewrite 资产清单与维护](docs/quantumultx/rewrites.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
