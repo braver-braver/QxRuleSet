@@ -7,6 +7,7 @@
 ```text
 quantumultX/rules/services/
 ├── apple.list
+├── apple-updates.list
 ├── appletv.list
 ├── bilibili.list
 ├── bing.list
@@ -34,10 +35,27 @@ quantumultX/rules/services/
 | `microsoft.list` | `微软服务` | Microsoft 365 / Outlook / OneDrive / Azure / Windows |
 | `appletv.list` | `AppleTV服务` | Apple TV 视频服务 |
 | `apple.list` | `苹果服务` | Apple / iCloud / App Store / Apple 基础服务 |
+| `apple-updates.list` | `direct` | Apple 系统更新、恢复与 Rosetta 更新的精确主机 |
 | `bilibili.list` | `BiliBili` | Bilibili Web / App / 视频 CDN |
 | `wechat.list` | `direct` | WeChat / Weixin / 微信支付及兼容 IP |
 
 这些 ruleset 由 `qx-macos.conf` 的 `[filter_remote]` 引用，并使用 `force-policy` 绑定到对应策略。
+
+## Apple 系统更新
+
+`apple-updates.list` 在 iOS/macOS 模板的 `[filter_remote]` 中最先加载，使用 `force-policy=direct`。这样手动将“苹果服务”切到代理地区时，系统更新仍保持直连；Apple TV、iCloud、App Store 等继续使用原有独立策略。
+
+主机范围来自 [Apple 官方网络要求的 Software updates 表](https://support.apple.com/en-us/101555)，只使用精确 `HOST`，不将整个 `apple.com`、`cdn-apple.com` 或共享 CDN 强制直连。该表说明主机用途；直连是本仓库的路由选择，不是 Apple 对所有网络的统一要求，也不保证 CDN 下载速度。
+
+已有私人 Profile 不会自动获得模板新增的资源引用。增量迁移时，将新模板中 `apple-updates.list` 的完整引用行加到现有 `[filter_remote]` 顶部并刷新该资源。若有个人 `[filter_local]` 主机覆盖，也应检查其实际优先级；本规则不能覆盖全局代理模式或上游路由器的再次分流。
+
+本机验收应查看 QX 请求日志中的实际命中规则、`direct` 策略、连接地址，并同时观察系统下载字节数。CI 只验证规则范围和资源先后顺序。若所在网络必须经代理访问更新服务，可禁用此资源，让请求重新由“苹果服务”策略处理。
+
+## 私人节点 DNS 维护
+
+节点域名专用 DNS 仍由私人 Profile 管理，不把机场域名、端点或订阅写入模板。为同一匹配域名配置多个并发 DoH 端点时，应按 [QX 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf) 将地址放在同一行，用逗号分隔；不要依赖多条相同匹配项的合并行为。
+
+检查端点必须发送有效 DNS 查询并校验响应；`HEAD /dns-query` 返回 405 只说明 HTTP 服务可达。若某端点持续 TLS 握手失败，应先确认其他端点能解析实际节点域名，再移除失效端点。保留普通域名的默认 DNS 设置；节点 DNS 不应扩展成全局解析器。
 
 ## Spotify
 

@@ -6,6 +6,7 @@ on:
       - 'quantumultX/qx-ios.conf'
       - 'quantumultX/qx-macos.conf'
       - 'quantumultX/tests/**'
+      - 'quantumultX/rules/services/apple*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   push:
     branches:
@@ -16,6 +17,7 @@ on:
       - 'quantumultX/qx-ios.conf'
       - 'quantumultX/qx-macos.conf'
       - 'quantumultX/tests/**'
+      - 'quantumultX/rules/services/apple*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   workflow_dispatch:
 
@@ -29,4 +31,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Quantumult X policy tree and failover defaults
-        run: node --test quantumultX/tests/policy-failover.test.mjs
+        run: node --test quantumultX/tests/*.test.mjs
