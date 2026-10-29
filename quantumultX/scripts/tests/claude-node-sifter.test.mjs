@@ -82,3 +82,19 @@ test('Cloudflare challenge is UNCERTAIN and does not make an API request', async
   assert.equal(result.status, 'uncertain')
   assert.equal(requests.length, 1)
 })
+
+test('Claude HTML static strings do not masquerade as a region or bot challenge', async () => {
+  const { result } = await probe(
+    { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error"}}' },
+    { statusCode: 200, body: '<html><script>const text="not available in your country"; const hint="cf-chl-";</script></html>' }
+  )
+  assert.equal(result.status, 'pass')
+})
+
+test('explicit unsupported-region page title is still a FAIL', async () => {
+  const { result } = await probe(
+    { statusCode: 401, body: '{"type":"authentication_error"}' },
+    { statusCode: 200, body: '<html><title>Country not supported</title></html>' }
+  )
+  assert.equal(result.status, 'fail')
+})
