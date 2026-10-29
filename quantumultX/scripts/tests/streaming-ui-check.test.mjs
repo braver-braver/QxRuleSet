@@ -313,3 +313,50 @@ test('challenge strings on HTTP 200 pages are not proof of bot mitigation', asyn
   })
   assert.ok(blocked.includes('Disneyᐩ: </b>验证拦截'))
 })
+
+test('Claude API generic 400/401 are unknown, not reachable', async () => {
+  for (const status of [400, 401]) {
+    const out = await probe({
+      'api.anthropic.com': { statusCode: status, body: '<html>Proxy Error</html>' }
+    })
+    assert.ok(out.includes('Claude API: </b>状态不明 (' + status), 'HTTP ' + status)
+    assert.ok(!out.includes('Claude API: </b>接口可达'), 'false positive: ' + status)
+  }
+})
+
+test('Claude API structured validation or authentication errors mean reachability only', async () => {
+  const invalidRequest = await probe({
+    'api.anthropic.com': {
+      statusCode: 400,
+      body: '{"type":"error","error":{"type":"invalid_request_error","message":"invalid request"}}'
+    }
+  })
+  assert.ok(invalidRequest.includes('Claude API: </b>接口可达 (未认证)'))
+  const auth = await probe({
+    'api.anthropic.com': {
+      statusCode: 401,
+      body: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'
+    }
+  })
+  assert.ok(auth.includes('Claude API: </b>接口可达 (未认证)'))
+})
+
+test('Claude API region restriction overrides 400/401; 451 needs no body', async () => {
+  for (const status of [400, 401, 451]) {
+    const out = await probe({
+      'api.anthropic.com': {
+        statusCode: status,
+        body: status === 451 ? '' : '{"error":{"message":"User location is not supported"}}'
+      }
+    })
+    assert.ok(out.includes('Claude API: </b>地区受限'), 'HTTP ' + status)
+  }
+})
+
+test('Claude API 429/529 remain inconclusive', async () => {
+  for (const status of [429, 529]) {
+    const out = await probe({ 'api.anthropic.com': { statusCode: status, body: '{}' } })
+    assert.ok(out.includes('Claude API: </b>限流/繁忙 (未验证)'), String(status))
+    assert.ok(!out.includes('Claude API: </b>接口可达'), String(status))
+  }
+})
