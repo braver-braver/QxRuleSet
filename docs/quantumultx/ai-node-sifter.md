@@ -121,6 +121,7 @@ API 请求使用明显无效的测试 key，不需要真实 API Key。Claude 使
 `UNCERTAIN`：
 
 - Cloudflare / bot challenge；
+- Claude 网页 HTTP 200 中仅作为静态 JavaScript 出现的地区限制 / Cloudflare 文案（不视为实际封锁）；
 - 无法确认语义的普通 400 / 401 / 403；
 - 429 限流和 529 负载繁忙（不会标为 PASS）；
 - DNS / timeout / 网络失败；
