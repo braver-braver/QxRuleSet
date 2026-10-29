@@ -14,6 +14,7 @@ function hits([type, domain], host) {
 }
 const core = parse(file('rules/ai/claude.list'))
 const telemetry = parse(file('rules/ai/claude-telemetry.list'))
+const updates = parse(file('rules/ai/updates.list'))
 
 test('official Claude Code API, OAuth, SSO, MCP, artifacts and downloads are covered', () => {
   for (const host of [
@@ -69,3 +70,17 @@ for (const platform of ['ios', 'macos']) {
     }
   })
 }
+
+test('macOS desktop download exceptions stay under the earlier AI updater group', () => {
+  const mac = file('qx-macos.conf')
+  const remote = mac.split('[filter_remote]')[1]?.split(/\n\[/)[0]
+  const lines = remote.split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#'))
+  const updaterIndex = lines.findIndex(x => x.includes('/rules/ai/updates.list,'))
+  const claudeIndex = lines.findIndex(x => x.includes('/rules/ai/claude.list,'))
+  assert.ok(updaterIndex >= 0 && updaterIndex < claudeIndex)
+  assert.match(lines[updaterIndex], /force-policy=AI应用更新/)
+  for (const host of ['downloads.claude.ai', 'a-cdn.anthropic.com']) {
+    assert.ok(core.some(r => hits(r, host)), 'also matches broader Claude suffix')
+    assert.ok(updates.some(r => hits(r, host)), 'needs explicit updater exception')
+  }
+})
