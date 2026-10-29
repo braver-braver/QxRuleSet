@@ -98,3 +98,17 @@ test('explicit unsupported-region page title is still a FAIL', async () => {
   )
   assert.equal(result.status, 'fail')
 })
+test('gateway JSON without full Anthropic envelope stays UNCERTAIN', async () => {
+  for (const statusCode of [400, 401]) {
+    for (const body of [
+      '{"type":"authentication_error"}',
+      '{"error":{"type":"authentication_error"}}',
+      '{"type":"proxy_error","error":{"type":"authentication_error"}}',
+      '{"type":"error","error":"authentication_error"}',
+      '{"type":"invalid_request_error"}'
+    ]) {
+      const { result } = await probe({ statusCode, body })
+      assert.equal(result.status, 'uncertain', statusCode + ': ' + body)
+    }
+  }
+})
