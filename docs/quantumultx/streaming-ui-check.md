@@ -141,3 +141,39 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 - **全局超时**：保持 v3.3.0 的 8.5 秒统一看门狗及「仅调用一次 `$done()`」语义。
 
 所有新增验证使用模拟 QX 环境（**无法模拟真实 QX UI / 节点出口 / 账号权限**）。CI 可以证明脚本语法和模拟分支行为正确，不代表脚本在特定 iPhone 或 Mac 上已经完成真实解锁检查。
+
+
+## 2026-10-29 脚本维护（v3.4.1）
+
+### Claude 网页：识别「所在地区不支持」落地页
+
+Claude 在不支持的地区访问 `claude.ai` 时，会 302 跳转到 `https://www.anthropic.com/app-unavailable-in-region`（继续跳到 `claude.com` 同路径），落地页标题为 `App unavailable in region | Claude by Anthropic`。QX 默认跟随重定向，旧版脚本只匹配 `country not supported` 一类标题，因此会把这个 200 落地页报告为「网页可达」。
+
+- 新增 `isClaudeRegionUnavailable()`：同时检查 `Location` 头含 `app-unavailable-in-region`（未跟随重定向时），以及落地页 `<title>` 含 `app unavailable in region`（已跟随时）。命中后报告「未支持」。
+- **只检查标题和 Location，不扫描整页文案**：SPA 脚本中可能含有同样的字符串，沿用「普通文案不单独作为判据」的约定。回归测试覆盖了这一点。
+
+### API 明确地区措辞
+
+`hasExplicitRegionMessage()` 增加两条明确措辞，仅在响应正文明确写出时才报告「地区受限」：
+
+- Anthropic：`Access to Anthropic models is not allowed from unsupported countries, regions, or territories.`
+- OpenAI：`Country, region, or territory not supported`
+
+### Claude API 403 措辞
+
+Claude Code 官方排障文档对 `403` 的解释是「代理/网络过滤拦截主机，或所在地区不受支持」；`403 Request not allowed` 也可能来自订阅/角色权限问题。无可证明地区的响应正文时，Claude API 的 403 现显示「访问受限 (403，地区或代理拦截待查)」，**不再暗示是地区封锁**，也不把它升级为「地区受限」。
+
+### 未改动与证据边界
+
+- **Gemini Web、ChatGPT Web 的不支持地区页面**：未找到可靠的、可复核的页面特征，本次没有新增启发式判断，保持现有「页面可达（解锁未证实）」语义。
+- 以上 Claude 网页行为来自 Anthropic 官方 `app-unavailable-in-region` 页面内容及公开 issue 中的用户报告（**未在受限地区的真实 QX 出口上复现**）。新增测试使用模拟响应，不代表真机验证；上线后建议用一个已知受限出口与一个已知支持出口各跑一次。
+- 与 v3.4.0 相同：更新 `main` 后，QX 设备上的远程脚本缓存需手动刷新。
+
+### 回归测试
+
+```bash
+node --check quantumultX/scripts/streaming-ui-check.js
+node --test quantumultX/scripts/tests/*.test.mjs
+```
+
+新增 5 项（共 26 项）：落地页（已跟随）/ 302 Location（未跟随）/ 脚本内同样文案不误报 / Anthropic 与 OpenAI 明确措辞 / 裸 403 不当作地区封锁。其中前 3 类在 v3.4.0 上会失败。
