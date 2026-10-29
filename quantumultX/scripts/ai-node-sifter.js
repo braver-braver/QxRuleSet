@@ -1,6 +1,6 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.2.3
+ * version: 0.2.4
  * updated: 2026-10-29
  *
  * Goal:
@@ -299,10 +299,31 @@ function hasClaudeWebRegionBlock(resp, body) {
     (status >= 400 && hasRegionBlock(text))
 }
 
+function claudeWebTitle(body) {
+  let m = String(body || "").match(/<title[^>]*>([^<]*)<\/title>/i)
+  return m ? m[1].trim().toLowerCase() : ""
+}
+
 function isClaudeWebChallenge(resp, body) {
   let status = Number(resp && resp.statusCode)
+  // An actual challenge title is stronger evidence than JS bundle strings.
   return getHeader(resp && resp.headers, "cf-mitigated").toLowerCase() === "challenge" ||
+    /^(just a moment\b|checking your browser\b|verify you are human\b)/i.test(claudeWebTitle(body)) ||
     ((status === 403 || status === 503) && isBotChallenge(resp, body))
+}
+
+function isClaudeTrustedRedirect(resp) {
+  let location = getHeader(resp && resp.headers, "location").trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  // The origin is HTTPS Claude. Relative paths and known first-party login
+  // endpoints are normal; unknown portals and downgraded HTTP are not.
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  let m = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!m) return false
+  let host = m[1].toLowerCase()
+  if (host === "anthropic.auth0.com") return true
+  return ["claude.ai", "claude.com", "anthropic.com", "clau.de"].some(domain =>
+    host === domain || host.endsWith("." + domain))
 }
 
 async function testClaude(node, region) {
@@ -322,7 +343,12 @@ async function testClaude(node, region) {
   let wb = String(web.body || "")
   if (hasClaudeWebRegionBlock(web, wb)) return { status: "fail", reason: "unsupported region", region: region }
   if (isClaudeWebChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
-  if (web.statusCode < 200 || web.statusCode >= 400) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
+  if ([301, 302, 303, 307, 308].indexOf(web.statusCode) >= 0) {
+    if (!isClaudeTrustedRedirect(web)) return { status: "uncertain", reason: "web unexpected redirect", region: region }
+  } else if (web.statusCode !== 200) {
+    // 204, 304 and other non-page responses do not prove Claude Web loads.
+    return { status: "uncertain", reason: "web " + web.statusCode, region: region }
+  }
 
   try {
     // A read-only probe with a deliberately invalid key; no Messages call.
