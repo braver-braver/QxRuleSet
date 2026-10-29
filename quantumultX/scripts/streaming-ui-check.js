@@ -348,8 +348,11 @@ function testClaude() {
 function claudeApiErrorType(body) {
   try {
     const response = JSON.parse(String(body || '{}'))
-    const error = response && response.error
-    return String((error && error.type) || (response && response.type) || '').toLowerCase()
+    // Only the documented Anthropic { type: 'error', error: { type } }
+    // envelope is usable evidence; reject gateway-generated bare codes.
+    if (!response || response.type !== 'error' || !response.error ||
+        typeof response.error.type !== 'string') return ''
+    return response.error.type.toLowerCase()
   } catch (_) {
     return ''
   }
