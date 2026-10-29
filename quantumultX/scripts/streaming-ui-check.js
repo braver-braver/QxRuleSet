@@ -1,5 +1,5 @@
 /***
- * 服务解锁检测 v3.4.1 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.4.2 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
@@ -307,6 +307,20 @@ async function getRegion(traceUrl) {
   return getFallbackRegion()
 }
 
+// Accept redirects only to Claude/Anthropic first-party login endpoints.
+// HTTP 302 to a captive portal is not proof that Claude Web loaded.
+function isClaudeTrustedRedirect(resp) {
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  const m = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!m) return false
+  const host = m[1].toLowerCase()
+  if (host === 'anthropic.auth0.com') return true
+  return ['claude.ai', 'claude.com', 'anthropic.com', 'clau.de'].some(domain =>
+    host === domain || host.endsWith('.' + domain))
+}
+
 // ===================== 检测: Claude Web =====================
 
 function testClaude() {
@@ -316,7 +330,7 @@ function testClaude() {
     try {
       let resp = await fetchWithTimeout({
         url: CLAUDE_WEB_URL,
-        opts: opts,
+        opts: opts_noRedirect,
         timeout: TIMEOUTS.web,
         headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
       })
@@ -326,15 +340,20 @@ function testClaude() {
       // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
       // “unavailable/restricted” 可能来自打包脚本，不能单独作为判据。
       let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
-      let deniedTitle = titleMatch && /country not supported|not available in your country/.test(titleMatch[1])
-      let accessDeniedTitle = titleMatch && /access denied/.test(titleMatch[1])
-      if (isBotChallenge(resp, body)) {
+      let title = titleMatch ? titleMatch[1].trim() : ''
+      let deniedTitle = /country not supported|not available in your country/.test(title)
+      let accessDeniedTitle = /access denied/.test(title)
+      let challengeTitle = /^(just a moment\b|checking your browser\b|verify you are human\b)/i.test(title)
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isBotChallenge(resp, body) || challengeTitle) {
         result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
       } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403 || accessDeniedTitle) {
         result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
+      } else if (redirect && !isClaudeTrustedRedirect(resp)) {
+        result.Claude = "<b>Claude: </b>跳转未确认 (" + s + ") ⚠️"
+      } else if (s === 200 || redirect) {
         result.Claude = "<b>Claude: </b>网页可达 (解锁未证实)" + arrow + "⟦" + f + "⟧ ⚠️"
       } else {
         result.Claude = "<b>Claude: </b>异常 (" + s + ") ❗️"
