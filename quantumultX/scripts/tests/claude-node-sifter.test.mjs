@@ -112,3 +112,57 @@ test('gateway JSON without full Anthropic envelope stays UNCERTAIN', async () =>
     }
   }
 })
+
+test('Claude web cross-site or malformed redirects cannot result in node PASS', async () => {
+  const valid = {
+    statusCode: 401,
+    body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}'
+  }
+  for (const location of [
+    'https://portal.example/login',
+    'https://claude.ai.evil.example/login',
+    'https://claude.ai@portal.example/login',
+    'http://claude.ai/login'
+  ]) {
+    const { result, requests } = await probe(valid, {
+      statusCode: 302, headers: { Location: location }, body: ''
+    })
+    assert.equal(result.status, 'uncertain', location)
+    assert.equal(requests.length, 1, 'do not probe API after untrusted redirect')
+  }
+})
+
+test('Claude web known login redirects remain acceptable as reachability evidence', async () => {
+  const valid = {
+    statusCode: 401,
+    body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}'
+  }
+  for (const location of [
+    '/login',
+    'https://claude.ai/login',
+    'https://anthropic.auth0.com/authorize'
+  ]) {
+    const { result } = await probe(valid, {
+      statusCode: 302, headers: { Location: location }, body: ''
+    })
+    assert.equal(result.status, 'pass', location)
+  }
+})
+
+test('Claude HTTP 200 challenge title without mitigation header stays UNCERTAIN', async () => {
+  const { result, requests } = await probe(
+    { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error"}}' },
+    { statusCode: 200, body: '<html><title>Just a moment...</title><body>Checking your browser</body></html>' }
+  )
+  assert.equal(result.status, 'uncertain')
+  assert.equal(requests.length, 1)
+})
+
+test('Claude web 204 without a page must not be a PASS', async () => {
+  const { result, requests } = await probe(
+    { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error"}}' },
+    { statusCode: 204, body: '' }
+  )
+  assert.equal(result.status, 'uncertain')
+  assert.equal(requests.length, 1)
+})
