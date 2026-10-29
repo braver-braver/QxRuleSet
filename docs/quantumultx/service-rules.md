@@ -53,7 +53,7 @@ quantumultX/rules/services/
 
 ## 私人节点 DNS 维护
 
-节点域名专用 DNS 仍由私人 Profile 管理，不把机场域名、端点或订阅写入模板。为同一匹配域名配置多个并发 DoH 端点时，应按 [QX 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf) 将地址放在同一行，用逗号分隔；不要依赖多条相同匹配项的合并行为。
+节点域名专用 DNS 仍由私人 Profile 管理，不把机场域名、端点或订阅写入模板。域名绑定的 DoH 保留每个端点独立一行、每行重复域名匹配项的写法。当前使用环境反馈：合并到同一行无效，因此不将默认 DoH 的逗号分隔示例套用于节点域名专用 DNS。[QX 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf) 分别展示了默认多 DoH 和单个域名绑定 DoH，并未给出域名绑定多个端点合并后的示例。
 
 检查端点必须发送有效 DNS 查询并校验响应；`HEAD /dns-query` 返回 405 只说明 HTTP 服务可达。若某端点持续 TLS 握手失败，应先确认其他端点能解析实际节点域名，再移除失效端点。保留普通域名的默认 DNS 设置；节点 DNS 不应扩展成全局解析器。
 
