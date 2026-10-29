@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.4.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.4.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-19
+ * 更新: 2026-10-29
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
@@ -176,7 +176,23 @@ function hasExplicitRegionMessage(body) {
     text.indexOf('country not supported') !== -1 ||
     text.indexOf('not available in your country') !== -1 ||
     text.indexOf('not available in your region') !== -1 ||
-    text.indexOf('service is not available in your territory') !== -1
+    text.indexOf('service is not available in your territory') !== -1 ||
+    // Anthropic: "Access to Anthropic models is not allowed from unsupported
+    // countries, regions, or territories."；OpenAI: "Country, region, or
+    // territory not supported"。仅匹配明确措辞。
+    text.indexOf('not allowed from unsupported countries') !== -1 ||
+    text.indexOf('country, region, or territory not supported') !== -1
+}
+
+// Claude 网页在不支持地区会 302 到 anthropic.com/app-unavailable-in-region
+// （再跳到 claude.com 同路径），落地页标题为
+// "App unavailable in region | Claude by Anthropic"。QX 默认跟随重定向，因此
+// 同时检查 Location 头（未跟随时）和落地页 <title>（已跟随时）。
+// 只看标题和 Location，不扫描整页文案：SPA 脚本里可能包含同样的字符串。
+function isClaudeRegionUnavailable(resp, titleText) {
+  const location = getHeader(resp && resp.headers, 'location').toLowerCase()
+  return location.indexOf('app-unavailable-in-region') !== -1 ||
+    /app unavailable in region/.test(String(titleText || '').toLowerCase())
 }
 
 function hasApiRegionBlock(body) {
@@ -328,9 +344,10 @@ function testClaude() {
       let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
       let deniedTitle = titleMatch && /country not supported|not available in your country/.test(titleMatch[1])
       let accessDeniedTitle = titleMatch && /access denied/.test(titleMatch[1])
+      let regionUnavailable = isClaudeRegionUnavailable(resp, titleMatch && titleMatch[1])
       if (isBotChallenge(resp, body)) {
         result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
-      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle) {
+      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle || regionUnavailable) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403 || accessDeniedTitle) {
         result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
@@ -369,7 +386,9 @@ function testClaudeAPI() {
       } else if (s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
       } else if (s === 403) {
-        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403) ⚠️"
+        // 官方排障文档：403 常见于代理/网络过滤拦截主机，或所在地区不受支持；
+        // 无响应正文可证明地区时，不据此断言「地区受限」。
+        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403，地区或代理拦截待查) ⚠️"
       } else {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
       }
