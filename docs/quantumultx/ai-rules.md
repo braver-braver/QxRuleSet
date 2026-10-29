@@ -52,7 +52,7 @@ persistent.oaistatic.com
 依据 [Anthropic 官方网络要求](https://code.claude.com/docs/en/network-config#network-access-requirements) 与 [Net.Coffee 候选清单](https://ip.net.coffee/claude/site.html) 核对：
 
 - `HOST-SUFFIX,anthropic.com` 已覆盖 `api.anthropic.com`、`mcp-proxy.anthropic.com` 与 `assets-proxy.anthropic.com`；`HOST-SUFFIX,claude.com` 已覆盖 OAuth 所需的 `platform.claude.com` 和组织 SSO 所需的 `sso.claude.com`。
-- `claude.ai` 已覆盖 `downloads.claude.ai`，`claudeusercontent.com` 已覆盖 Chrome 桥接及 Artifact 内容，`claudemcpcontent.com` 已覆盖 MCP widget 子域名。无需堆叠重复规则。
+- `claude.ai` 后缀规则覆盖 `downloads.claude.ai`，但 **macOS 中更优先的 `updates.list` 会将它以及 `a-cdn.anthropic.com` 分流到 `AI应用更新`**，这是既有设计，应保留；iOS 没有加载桌面更新资源。`claudeusercontent.com` 覆盖 Chrome 桥接及 Artifact 内容，`claudemcpcontent.com` 覆盖 MCP widget 子域名。无需堆叠重复规则。
 - `github.com`、`raw.githubusercontent.com`、`registry.npmjs.org`、`storage.googleapis.com` 是共享依赖，继续交由通用 GitHub、Google 或其他既有策略管理。
 - `sentry.io`、`statsigapi.net`、`intercom.io`、`cdn.usefathom.com` 与关键词 `datadog/sentry/sift` 都可能覆盖其他应用，**不加入默认 Claude 分流**。
 - Anthropic 官方记录 Claude Code 的可选遥测使用 `http-intake.logs.us5.datadoghq.com` 和 `browser-intake-us5-datadoghq.com`。有需要时才手动加载 `claude-telemetry.list`；即使是精确 HOST，这两个共享收集器也可能承载其他软件的请求，启用前应了解这一副作用。
