@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.4.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.4.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-19
+ * 更新: 2026-10-29
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
@@ -345,6 +345,16 @@ function testClaude() {
   })()
 }
 
+function claudeApiErrorType(body) {
+  try {
+    const response = JSON.parse(String(body || '{}'))
+    const error = response && response.error
+    return String((error && error.type) || (response && response.type) || '').toLowerCase()
+  } catch (_) {
+    return ''
+  }
+}
+
 // ===================== 检测: Claude API =====================
 
 function testClaudeAPI() {
@@ -361,11 +371,16 @@ function testClaudeAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 无效密钥仅证明接口可达；明确地区阻断优先于 HTTP 状态码判断。
-      if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
+      // Generic HTTP 400/401 can be emitted by a proxy or gateway.
+      // Only structured Anthropic errors support a reachability claim.
+      const errorType = claudeApiErrorType(body)
+      if (s === 451 || hasApiRegionBlock(body)) {
         result.ClaudeAPI = "<b>Claude API: </b>地区受限 🚫"
-      } else if (s === 401 || s === 400) {
+      } else if ((s === 401 && errorType === 'authentication_error') ||
+                 (s === 400 && errorType === 'invalid_request_error')) {
         result.ClaudeAPI = "<b>Claude API: </b>接口可达 (未认证) ⚠️"
+      } else if (s === 400 || s === 401) {
+        result.ClaudeAPI = "<b>Claude API: </b>状态不明 (" + s + "，未认证) ⚠️"
       } else if (s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
       } else if (s === 403) {
