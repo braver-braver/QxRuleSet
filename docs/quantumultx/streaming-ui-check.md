@@ -141,3 +141,10 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 - **全局超时**：保持 v3.3.0 的 8.5 秒统一看门狗及「仅调用一次 `$done()`」语义。
 
 所有新增验证使用模拟 QX 环境（**无法模拟真实 QX UI / 节点出口 / 账号权限**）。CI 可以证明脚本语法和模拟分支行为正确，不代表脚本在特定 iPhone 或 Mac 上已经完成真实解锁检查。
+
+## 2026-10-29 Claude API 检测收敛（v3.4.1）
+
+- 无效 Key 探测仅在结构化 Anthropic `authentication_error`（HTTP 401）或 `invalid_request_error`（HTTP 400）时显示「接口可达（未认证）」；泛化的 400/401 可能来自代理或网关，改为「状态不明」。
+- 明确地区拒绝（包括 HTTP 451、响应体中的区域限制）优先于认证状态；429/529 继续标为「限流/繁忙」，不报告完整解锁。
+- [第三方 Claude IP 检测](https://ip.net.coffee/claude/) 仅能提供出口 IP、浏览器环境及网络质量线索，不能替代通过 `$task.fetch` 和明确 `opts.policy` 对目标节点的检查；第三方信任分不等于 Anthropic 官方账号判定。
+- 回归测试采用脱敏 QX 模拟响应；未验证 Quantumult X 真机、真实代理节点或登录账号模型调用。
