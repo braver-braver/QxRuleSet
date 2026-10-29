@@ -385,6 +385,10 @@ test('Claude Web unknown redirect is not reported as a reachable page', async ()
     'claude.ai': { statusCode: 302, headers: { Location: 'https://claude.ai/login' }, body: '' }
   })
   assert.ok(expected.includes('Claude: </b>网页可达 (解锁未证实)'))
+  const challenge = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: '/cdn-cgi/challenge-platform/start' }, body: '' }
+  })
+  assert.ok(challenge.includes('Claude: </b>跳转未确认 (302)'), challenge)
 })
 
 test('Claude HTTP 200 challenge title is not a normal page', async () => {

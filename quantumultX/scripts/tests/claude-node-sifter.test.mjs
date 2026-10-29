@@ -122,6 +122,9 @@ test('Claude web cross-site or malformed redirects cannot result in node PASS', 
     'https://portal.example/login',
     'https://claude.ai.evil.example/login',
     'https://claude.ai@portal.example/login',
+    '/cdn-cgi/challenge-platform/start',
+    'https://claude.ai/cdn-cgi/challenge-platform/start',
+    '//portal.example/login',
     'http://claude.ai/login'
   ]) {
     const { result, requests } = await probe(valid, {

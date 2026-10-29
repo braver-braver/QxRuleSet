@@ -109,7 +109,7 @@ API 请求使用明显无效的测试 key，不需要真实 API Key。Claude 使
 
 `PASS`：
 
-- Web 正常可达；
+- Claude Web 返回正常的 HTTP 200 页面，或跳转到已知的 Claude/Anthropic 登录入口（陌生第三方跳转不得标为 PASS）；
 - API 返回能够识别为 Anthropic 的结构化 invalid key / invalid request 错误且没有明确地区限制（仅代表网络可达）。
 
 `FAIL`：
@@ -120,7 +120,8 @@ API 请求使用明显无效的测试 key，不需要真实 API Key。Claude 使
 
 `UNCERTAIN`：
 
-- Cloudflare / bot challenge；
+- Cloudflare / bot challenge（包括没有 `cf-mitigated` 响应头，但 HTML 标题明确为验证页的 HTTP 200）；
+- Claude Web 重定向到不可信站点、挑战路径，或返回 HTTP 204 等非网页响应；
 - Claude 网页 HTTP 200 中仅作为静态 JavaScript 出现的地区限制 / Cloudflare 文案（不视为实际封锁）；
 - 无法确认语义的普通 400 / 401 / 403；
 - 429 限流和 529 负载繁忙（不会标为 PASS）；
