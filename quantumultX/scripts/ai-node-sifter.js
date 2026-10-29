@@ -276,8 +276,11 @@ async function testOpenAI(node, region) {
 function anthropicApiErrorType(body) {
   try {
     let value = JSON.parse(String(body || "{}"))
-    let error = value && value.error
-    return String((error && error.type) || (value && value.type) || "").toLowerCase()
+    // Anthropic errors use { type: "error", error: { type, message } }.
+    // A gateway's bare { type: "authentication_error" } is not proof.
+    if (!value || value.type !== "error" || !value.error ||
+        typeof value.error.type !== "string") return ""
+    return value.error.type.toLowerCase()
   } catch (_) {
     return ""
   }
