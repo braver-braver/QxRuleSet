@@ -43,9 +43,13 @@ quantumultX/rules/services/
 
 ## Apple 系统更新
 
-`apple-updates.list` 在 iOS/macOS 模板的 `[filter_remote]` 中最先加载，使用 `force-policy=direct`。这样手动将“苹果服务”切到代理地区时，系统更新仍保持直连；Apple TV、iCloud、App Store 等继续使用原有独立策略。
+`apple-updates.list` 在 iOS/macOS 模板的 `[filter_remote]` 中最先加载，使用 `force-policy=direct`。这样手动将“苹果服务”切到代理地区时，系统更新仍保持直连；Apple TV 继续使用 `AppleTV服务`，iCloud 和 App Store 继续使用 `苹果服务`，不会因本资源被强制直连。
 
 主机范围来自 [Apple 官方网络要求的 Software updates 表](https://support.apple.com/en-us/101555)，只使用精确 `HOST`，不将整个 `apple.com`、`cdn-apple.com` 或共享 CDN 强制直连。该表说明主机用途；直连是本仓库的路由选择，不是 Apple 对所有网络的统一要求，也不保证 CDN 下载速度。
+
+2026-10-29 核对后，规则覆盖官方表中 20 个已明确标注为系统更新目录、附加组件更新、恢复、安装或下载用途的主机。`gdmf-ados.apple.com`、`gsra.apple.com` 用于附加组件更新；`wkms-public.apple.com`、`fcs-keys-pub-prod.cdn-apple.com` 用于为连接的设备安装系统。
+
+`xp.apple.com` 虽列在 Apple 的 Software updates 表内，但该表未注明具体用途；[macOS 更新日志分析](https://eclecticlight.co/2026/03/04/how-macos-26-tahoe-updates-2-finite-state-machines/)显示它用于提交更新进度事件。为避免将尚未证实为更新/恢复传输所必需的上报流量一律强制直连，暂不加入例外列表；它仍按 `苹果服务` 既有策略路由。离线测试显式覆盖这项排除。
 
 已有私人 Profile 不会自动获得模板新增的资源引用。增量迁移时，将新模板中 `apple-updates.list` 的完整引用行加到现有 `[filter_remote]` 顶部并刷新该资源。若有个人 `[filter_local]` 主机覆盖，也应检查其实际优先级；本规则不能覆盖全局代理模式或上游路由器的再次分流。
 

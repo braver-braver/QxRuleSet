@@ -5,13 +5,15 @@ import { readFileSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
 const resource = "rules/services/apple-updates.list";
-// Apple enterprise network requirements, Software updates (checked 2026-10-27).
+// Apple enterprise network requirements, Software updates (checked 2026-10-29; only hosts with explicit update/install purpose).
 const updateHosts = [
-  "appldnld.apple.com", "configuration.apple.com", "gdmf.apple.com",
-  "gg.apple.com", "gs.apple.com", "ig.apple.com", "mesu.apple.com",
-  "oscdn.apple.com", "osrecovery.apple.com", "skl.apple.com",
-  "swcdn.apple.com", "swdist.apple.com", "swdownload.apple.com",
-  "swscan.apple.com", "updates-http.cdn-apple.com", "updates.cdn-apple.com"
+  "appldnld.apple.com", "configuration.apple.com", "fcs-keys-pub-prod.cdn-apple.com",
+  "gdmf-ados.apple.com", "gdmf.apple.com", "gg.apple.com",
+  "gs.apple.com", "gsra.apple.com", "ig.apple.com",
+  "mesu.apple.com", "oscdn.apple.com", "osrecovery.apple.com",
+  "skl.apple.com", "swcdn.apple.com", "swdist.apple.com",
+  "swdownload.apple.com", "swscan.apple.com", "updates-http.cdn-apple.com",
+  "updates.cdn-apple.com", "wkms-public.apple.com"
 ];
 
 function rules(path) {
@@ -43,6 +45,21 @@ for (const platform of ["ios", "macos"]) {
     assert.match(entries[0], /\/refs\/heads\/main\/quantumultX\//);
   });
 
+
+  test(platform + ": no local domain rule intercepts update hosts", () => {
+    // Static conflict guard: a [filter_local] HOST/HOST-SUFFIX may take precedence.
+    const section = text.split("[filter_local]")[1]?.split(/\n\[/)[0];
+    assert.ok(section, "filter_local missing");
+    const localDomainRules = section.split(/\r?\n/)
+      .map(line => line.trim()).filter(line => line && !/^[#;]/.test(line))
+      .map(line => line.split(",").map(part => part.trim()))
+      .filter(rule => ["host", "host-suffix"].includes(rule[0].toLowerCase()));
+    for (const host of updateHosts) {
+      assert.ok(!localDomainRules.some(rule => matches(rule, host)),
+        "local domain rule could override update resource: " + host);
+    }
+  });
+
   test(platform + ": switching Apple service group cannot redirect updates or Apple TV", () => {
     // Model the ordered domain resources under both manual Apple selections.
     const section = text.split("[filter_remote]")[1]?.split(/\n\[/)[0] || "";
@@ -61,6 +78,10 @@ for (const platform of ["ios", "macos"]) {
       }
       for (const host of updateHosts) assert.equal(route(host), "direct", host);
       assert.equal(route("www.apple.com"), appleChoice);
+      assert.equal(route("apps.apple.com"), appleChoice, "App Store remains on Apple services");
+      assert.equal(route("itunes.apple.com"), appleChoice, "iTunes/App Store remains selectable");
+      assert.equal(route("is1-ssl.mzstatic.com"), appleChoice, "App Store assets remain selectable");
+      assert.equal(route("xp.apple.com"), appleChoice, "update telemetry is not forced direct");
       assert.equal(route("gateway.icloud.com.cn"), appleChoice);
       assert.equal(route("tv.apple.com"), "AppleTV服务");
       assert.equal(route("play-edge.itunes.apple.com"), "AppleTV服务");
@@ -78,6 +99,8 @@ test("update exceptions are exact Apple hosts, not shared CDN or service suffixe
     assert.equal(rule[2], "direct");
   }
   for (const host of ["apple.com", "tv.apple.com", "icloud.com", "apps.apple.com",
+    "xp.apple.com", "sub.gdmf-ados.apple.com", "wkms-public.apple.com.evil.example",
+    "example.fcs-keys-pub-prod.cdn-apple.com",
     "appleid.cdn-apple.com", "example.cdn-apple.com", "updates.cdn-apple.com.evil.example",
     "fake-updates.cdn-apple.com", "sub.updates.cdn-apple.com", "gdmf.apple.com.evil.example"]) {
     assert.ok(!updates.some(rule => matches(rule, host)), "overbroad direct exception: " + host);
