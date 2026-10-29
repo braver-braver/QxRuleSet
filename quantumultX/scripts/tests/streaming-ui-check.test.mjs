@@ -374,3 +374,30 @@ test('Claude API rejects bare or incomplete authentication JSON envelopes', asyn
     }
   }
 })
+
+test('Claude Web unknown redirect is not reported as a reachable page', async () => {
+  const unknown = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://portal.example/login' }, body: '' }
+  })
+  assert.ok(unknown.includes('Claude: </b>跳转未确认 (302)'), unknown)
+  assert.ok(!unknown.includes('Claude: </b>网页可达'), unknown)
+  const expected = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://claude.ai/login' }, body: '' }
+  })
+  assert.ok(expected.includes('Claude: </b>网页可达 (解锁未证实)'))
+})
+
+test('Claude HTTP 200 challenge title is not a normal page', async () => {
+  const out = await probe({
+    'claude.ai': { statusCode: 200, body: '<html><title>Just a moment...</title></html>' }
+  })
+  assert.ok(out.includes('Claude: </b>验证拦截'), out)
+  assert.ok(!out.includes('Claude: </b>网页可达'), out)
+})
+
+test('Claude Web probe must disable automatic HTTP redirects', async () => {
+  const { requests } = await probeRuntime()
+  const claudeWeb = requests.find(req => req.url === 'https://claude.ai')
+  assert.ok(claudeWeb)
+  assert.equal(claudeWeb.opts.redirection, false)
+})
