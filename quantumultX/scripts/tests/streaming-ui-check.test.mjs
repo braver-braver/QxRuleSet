@@ -9,7 +9,7 @@ const source = readFileSync(new URL('../streaming-ui-check.js', import.meta.url)
 async function probe(overrides = {}) {
   let report
   const defaults = {
-    'api.anthropic.com': { statusCode: 401, body: '{"type":"authentication_error"}' },
+    'api.anthropic.com': { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}' },
     'api.openai.com': { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' },
     'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"INVALID_ARGUMENT","message":"API_KEY_INVALID"}}' },
     'www.netflix.com': { statusCode: 404, body: '' },
@@ -312,4 +312,96 @@ test('challenge strings on HTTP 200 pages are not proof of bot mitigation', asyn
     }
   })
   assert.ok(blocked.includes('Disneyᐩ: </b>验证拦截'))
+})
+
+test('Claude API generic 400/401 are unknown, not reachable', async () => {
+  for (const status of [400, 401]) {
+    const out = await probe({
+      'api.anthropic.com': { statusCode: status, body: '<html>Proxy Error</html>' }
+    })
+    assert.ok(out.includes('Claude API: </b>状态不明 (' + status), 'HTTP ' + status)
+    assert.ok(!out.includes('Claude API: </b>接口可达'), 'false positive: ' + status)
+  }
+})
+
+test('Claude API structured validation or authentication errors mean reachability only', async () => {
+  const invalidRequest = await probe({
+    'api.anthropic.com': {
+      statusCode: 400,
+      body: '{"type":"error","error":{"type":"invalid_request_error","message":"invalid request"}}'
+    }
+  })
+  assert.ok(invalidRequest.includes('Claude API: </b>接口可达 (未认证)'))
+  const auth = await probe({
+    'api.anthropic.com': {
+      statusCode: 401,
+      body: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'
+    }
+  })
+  assert.ok(auth.includes('Claude API: </b>接口可达 (未认证)'))
+})
+
+test('Claude API region restriction overrides 400/401; 451 needs no body', async () => {
+  for (const status of [400, 401, 451]) {
+    const out = await probe({
+      'api.anthropic.com': {
+        statusCode: status,
+        body: status === 451 ? '' : '{"error":{"message":"User location is not supported"}}'
+      }
+    })
+    assert.ok(out.includes('Claude API: </b>地区受限'), 'HTTP ' + status)
+  }
+})
+
+test('Claude API 429/529 remain inconclusive', async () => {
+  for (const status of [429, 529]) {
+    const out = await probe({ 'api.anthropic.com': { statusCode: status, body: '{}' } })
+    assert.ok(out.includes('Claude API: </b>限流/繁忙 (未验证)'), String(status))
+    assert.ok(!out.includes('Claude API: </b>接口可达'), String(status))
+  }
+})
+test('Claude API rejects bare or incomplete authentication JSON envelopes', async () => {
+  for (const status of [400, 401]) {
+    for (const body of [
+      '{"type":"authentication_error"}',
+      '{"error":{"type":"authentication_error"}}',
+      '{"type":"proxy_error","error":{"type":"authentication_error"}}',
+      '{"type":"error","error":"authentication_error"}'
+    ]) {
+      const out = await probe({ 'api.anthropic.com': { statusCode: status, body } })
+      assert.ok(out.includes('Claude API: </b>状态不明 (' + status), body)
+      assert.ok(!out.includes('Claude API: </b>接口可达'), body)
+    }
+  }
+})
+
+test('Claude Web unknown redirect is not reported as a reachable page', async () => {
+  const unknown = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://portal.example/login' }, body: '' }
+  })
+  assert.ok(unknown.includes('Claude: </b>跳转未确认 (302)'), unknown)
+  assert.ok(!unknown.includes('Claude: </b>网页可达'), unknown)
+  const expected = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://claude.ai/login' }, body: '' }
+  })
+  assert.ok(expected.includes('Claude: </b>网页可达 (解锁未证实)'))
+  const challenge = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: '/cdn-cgi/challenge-platform/start' }, body: '' }
+  })
+  assert.ok(challenge.includes('Claude: </b>跳转未确认 (302)'), challenge)
+})
+
+test('Claude HTTP 200 challenge title is not a normal page', async () => {
+  const out = await probe({
+    'claude.ai': { statusCode: 200, body: '<html><title>Just a moment...</title></html>' }
+  })
+  assert.ok(out.includes('Claude: </b>验证拦截'), out)
+  assert.ok(!out.includes('Claude: </b>网页可达'), out)
+})
+
+test('Claude Web probe must disable automatic HTTP redirects', async () => {
+  const { requests } = await probeRuntime()
+  const claudeWeb = requests.find(req => req.url === 'https://claude.ai')
+  assert.ok(claudeWeb)
+  assert.equal(claudeWeb.opts.redirection, false)
 })

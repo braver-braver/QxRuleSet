@@ -93,7 +93,7 @@ Claude：
 
 ```text
 claude.ai
-api.anthropic.com/v1/messages
+api.anthropic.com/v1/models
 ```
 
 Gemini：
@@ -103,14 +103,14 @@ gemini.google.com/app
 generativelanguage.googleapis.com
 ```
 
-API 请求使用明显无效的测试 key，只根据响应状态判断服务端是否可达，不需要真实 API Key。
+API 请求使用明显无效的测试 key，不需要真实 API Key。Claude 使用只读 GET `/v1/models`，不再发送模拟 Messages 请求。HTTP 401 `authentication_error` 或 400 `invalid_request_error` 必须为结构化 Anthropic 错误才作为网络可达证据；它**不能证明**账号订阅、模型调用权限或 Anthropic 地区准入。
 
 ### 4. PASS / FAIL / UNCERTAIN
 
 `PASS`：
 
-- Web 正常可达；
-- API 返回能证明端点已经到达服务端的状态，例如 invalid key / invalid request / rate limit。
+- Claude Web 返回正常的 HTTP 200 页面，或跳转到已知的 Claude/Anthropic 登录入口（陌生第三方跳转不得标为 PASS）；
+- API 返回能够识别为 Anthropic 的结构化 invalid key / invalid request 错误且没有明确地区限制（仅代表网络可达）。
 
 `FAIL`：
 
@@ -120,8 +120,11 @@ API 请求使用明显无效的测试 key，只根据响应状态判断服务端
 
 `UNCERTAIN`：
 
-- Cloudflare / bot challenge；
-- 无法确认语义的普通 403；
+- Cloudflare / bot challenge（包括没有 `cf-mitigated` 响应头，但 HTML 标题明确为验证页的 HTTP 200）；
+- Claude Web 重定向到不可信站点、挑战路径，或返回 HTTP 204 等非网页响应；
+- Claude 网页 HTTP 200 中仅作为静态 JavaScript 出现的地区限制 / Cloudflare 文案（不视为实际封锁）；
+- 无法确认语义的普通 400 / 401 / 403；
+- 429 限流和 529 负载繁忙（不会标为 PASS）；
 - DNS / timeout / 网络失败；
 - 无法识别出口地区；
 - 未知 HTTP 状态。

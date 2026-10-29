@@ -1,7 +1,7 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.2.1
- * updated: 2026-10-08
+ * version: 0.2.4
+ * updated: 2026-10-29
  *
  * Goal:
  * - keep AI traffic on a node that is actually accepted by the provider
@@ -44,7 +44,7 @@ const PROVIDERS = {
     preferredRegions: ["US", "GB", "JP", "SG"],
     traceUrl: "https://claude.ai/cdn-cgi/trace",
     webUrl: "https://claude.ai",
-    apiUrl: "https://api.anthropic.com/v1/messages"
+    apiUrl: "https://api.anthropic.com/v1/models"
   },
   gemini: {
     name: "Gemini",
@@ -273,6 +273,59 @@ async function testOpenAI(node, region) {
   }
 }
 
+function anthropicApiErrorType(body) {
+  try {
+    let value = JSON.parse(String(body || "{}"))
+    // Anthropic errors use { type: "error", error: { type, message } }.
+    // A gateway's bare { type: "authentication_error" } is not proof.
+    if (!value || value.type !== "error" || !value.error ||
+        typeof value.error.type !== "string") return ""
+    return value.error.type.toLowerCase()
+  } catch (_) {
+    return ""
+  }
+}
+
+function hasClaudeWebRegionBlock(resp, body) {
+  let status = Number(resp && resp.statusCode)
+  let text = String(body || "")
+  let title = (text.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || ""
+  // A normal HTML bundle may contain support/country/challenge strings in JS.
+  // Only the actual error-page title, structured JSON, or error HTTP status
+  // can establish a region block.
+  return status === 451 ||
+    /country not supported|not available in your country|not available in your region/i.test(title) ||
+    (text.trim().charAt(0) === "{" && hasRegionBlock(text)) ||
+    (status >= 400 && hasRegionBlock(text))
+}
+
+function claudeWebTitle(body) {
+  let m = String(body || "").match(/<title[^>]*>([^<]*)<\/title>/i)
+  return m ? m[1].trim().toLowerCase() : ""
+}
+
+function isClaudeWebChallenge(resp, body) {
+  let status = Number(resp && resp.statusCode)
+  // An actual challenge title is stronger evidence than JS bundle strings.
+  return getHeader(resp && resp.headers, "cf-mitigated").toLowerCase() === "challenge" ||
+    /^(just a moment\b|checking your browser\b|verify you are human\b)/i.test(claudeWebTitle(body)) ||
+    ((status === 403 || status === 503) && isBotChallenge(resp, body))
+}
+
+function isClaudeTrustedRedirect(resp) {
+  let location = getHeader(resp && resp.headers, "location").trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  // The origin is HTTPS Claude. Relative paths and known first-party login
+  // endpoints are normal; unknown portals and downgraded HTTP are not.
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  let m = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!m) return false
+  let host = m[1].toLowerCase()
+  if (host === "anthropic.auth0.com") return true
+  return ["claude.ai", "claude.com", "anthropic.com", "clau.de"].some(domain =>
+    host === domain || host.endsWith("." + domain))
+}
+
 async function testClaude(node, region) {
   let cfg = PROVIDERS.claude
   let web
@@ -288,36 +341,42 @@ async function testClaude(node, region) {
   }
 
   let wb = String(web.body || "")
-  if (web.statusCode === 451 || hasRegionBlock(wb)) return { status: "fail", reason: "unsupported region", region: region }
-  if (isBotChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
-  if (web.statusCode < 200 || web.statusCode >= 400) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
+  if (hasClaudeWebRegionBlock(web, wb)) return { status: "fail", reason: "unsupported region", region: region }
+  if (isClaudeWebChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
+  if ([301, 302, 303, 307, 308].indexOf(web.statusCode) >= 0) {
+    if (!isClaudeTrustedRedirect(web)) return { status: "uncertain", reason: "web unexpected redirect", region: region }
+  } else if (web.statusCode !== 200) {
+    // 204, 304 and other non-page responses do not prove Claude Web loads.
+    return { status: "uncertain", reason: "web " + web.statusCode, region: region }
+  }
 
   try {
+    // A read-only probe with a deliberately invalid key; no Messages call.
     let api = await fetchWithTimeout({
       url: cfg.apiUrl,
-      method: "POST",
+      method: "GET",
       opts: { policy: node },
       timeout: TIMEOUT,
       headers: {
-        "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
-        "x-api-key": "sk-ant-api03-test-000000"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "hi" }]
-      })
+        "x-api-key": "invalid-key-for-reachability-test"
+      }
     })
     let body = String(api.body || "")
-    if (api.statusCode === 451 || (api.statusCode === 403 && hasRegionBlock(body))) {
+    let errorType = anthropicApiErrorType(body)
+    if (api.statusCode === 451 || hasRegionBlock(body)) {
       return { status: "fail", reason: "API region blocked", region: region }
     }
-    if ([400, 401, 429, 529, 200].indexOf(api.statusCode) >= 0) {
-      return { status: "pass", reason: "web + API reachable", region: region }
+    if ((api.statusCode === 401 && errorType === "authentication_error") ||
+        (api.statusCode === 400 && errorType === "invalid_request_error")) {
+      // Network reachability only; cannot prove an account/model is authorized.
+      return { status: "pass", reason: "web + API structured response (reachability only)", region: region }
+    }
+    if (api.statusCode === 429 || api.statusCode === 529) {
+      return { status: "uncertain", reason: "API rate limited/overloaded", region: region }
     }
     if (api.statusCode === 403) return { status: "uncertain", reason: "API generic 403", region: region }
-    return { status: "uncertain", reason: "API " + api.statusCode, region: region }
+    return { status: "uncertain", reason: "API unverified " + api.statusCode, region: region }
   } catch (e) {
     return { status: "uncertain", reason: "API network error", region: region }
   }
