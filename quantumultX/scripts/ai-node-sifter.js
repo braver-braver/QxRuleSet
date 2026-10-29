@@ -1,6 +1,6 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.2.2
+ * version: 0.2.3
  * updated: 2026-10-29
  *
  * Goal:
@@ -283,6 +283,25 @@ function anthropicApiErrorType(body) {
   }
 }
 
+function hasClaudeWebRegionBlock(resp, body) {
+  let status = Number(resp && resp.statusCode)
+  let text = String(body || "")
+  let title = (text.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || ""
+  // A normal HTML bundle may contain support/country/challenge strings in JS.
+  // Only the actual error-page title, structured JSON, or error HTTP status
+  // can establish a region block.
+  return status === 451 ||
+    /country not supported|not available in your country|not available in your region/i.test(title) ||
+    (text.trim().charAt(0) === "{" && hasRegionBlock(text)) ||
+    (status >= 400 && hasRegionBlock(text))
+}
+
+function isClaudeWebChallenge(resp, body) {
+  let status = Number(resp && resp.statusCode)
+  return getHeader(resp && resp.headers, "cf-mitigated").toLowerCase() === "challenge" ||
+    ((status === 403 || status === 503) && isBotChallenge(resp, body))
+}
+
 async function testClaude(node, region) {
   let cfg = PROVIDERS.claude
   let web
@@ -298,8 +317,8 @@ async function testClaude(node, region) {
   }
 
   let wb = String(web.body || "")
-  if (web.statusCode === 451 || hasRegionBlock(wb)) return { status: "fail", reason: "unsupported region", region: region }
-  if (isBotChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
+  if (hasClaudeWebRegionBlock(web, wb)) return { status: "fail", reason: "unsupported region", region: region }
+  if (isClaudeWebChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
   if (web.statusCode < 200 || web.statusCode >= 400) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
 
   try {
