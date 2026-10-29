@@ -9,7 +9,7 @@ const source = readFileSync(new URL('../streaming-ui-check.js', import.meta.url)
 async function probe(overrides = {}) {
   let report
   const defaults = {
-    'api.anthropic.com': { statusCode: 401, body: '{"type":"authentication_error"}' },
+    'api.anthropic.com': { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}' },
     'api.openai.com': { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' },
     'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"INVALID_ARGUMENT","message":"API_KEY_INVALID"}}' },
     'www.netflix.com': { statusCode: 404, body: '' },
@@ -358,5 +358,19 @@ test('Claude API 429/529 remain inconclusive', async () => {
     const out = await probe({ 'api.anthropic.com': { statusCode: status, body: '{}' } })
     assert.ok(out.includes('Claude API: </b>限流/繁忙 (未验证)'), String(status))
     assert.ok(!out.includes('Claude API: </b>接口可达'), String(status))
+  }
+})
+test('Claude API rejects bare or incomplete authentication JSON envelopes', async () => {
+  for (const status of [400, 401]) {
+    for (const body of [
+      '{"type":"authentication_error"}',
+      '{"error":{"type":"authentication_error"}}',
+      '{"type":"proxy_error","error":{"type":"authentication_error"}}',
+      '{"type":"error","error":"authentication_error"}'
+    ]) {
+      const out = await probe({ 'api.anthropic.com': { statusCode: status, body } })
+      assert.ok(out.includes('Claude API: </b>状态不明 (' + status), body)
+      assert.ok(!out.includes('Claude API: </b>接口可达'), body)
+    }
   }
 })
