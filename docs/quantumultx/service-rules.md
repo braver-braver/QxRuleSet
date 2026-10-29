@@ -7,6 +7,7 @@
 ```text
 quantumultX/rules/services/
 ├── apple.list
+├── apple-updates.list
 ├── appletv.list
 ├── bilibili.list
 ├── bing.list
@@ -34,10 +35,31 @@ quantumultX/rules/services/
 | `microsoft.list` | `微软服务` | Microsoft 365 / Outlook / OneDrive / Azure / Windows |
 | `appletv.list` | `AppleTV服务` | Apple TV 视频服务 |
 | `apple.list` | `苹果服务` | Apple / iCloud / App Store / Apple 基础服务 |
+| `apple-updates.list` | `direct` | Apple 系统更新、恢复与 Rosetta 更新的精确主机 |
 | `bilibili.list` | `BiliBili` | Bilibili Web / App / 视频 CDN |
 | `wechat.list` | `direct` | WeChat / Weixin / 微信支付及兼容 IP |
 
 这些 ruleset 由 `qx-macos.conf` 的 `[filter_remote]` 引用，并使用 `force-policy` 绑定到对应策略。
+
+## Apple 系统更新
+
+`apple-updates.list` 在 iOS/macOS 模板的 `[filter_remote]` 中最先加载，使用 `force-policy=direct`。这样手动将“苹果服务”切到代理地区时，系统更新仍保持直连；Apple TV 继续使用 `AppleTV服务`，iCloud 和 App Store 继续使用 `苹果服务`，不会因本资源被强制直连。
+
+主机范围来自 [Apple 官方网络要求的 Software updates 表](https://support.apple.com/en-us/101555)，只使用精确 `HOST`，不将整个 `apple.com`、`cdn-apple.com` 或共享 CDN 强制直连。该表说明主机用途；直连是本仓库的路由选择，不是 Apple 对所有网络的统一要求，也不保证 CDN 下载速度。
+
+2026-10-29 核对后，规则覆盖官方表中 20 个已明确标注为系统更新目录、附加组件更新、恢复、安装或下载用途的主机。`gdmf-ados.apple.com`、`gsra.apple.com` 用于附加组件更新；`wkms-public.apple.com`、`fcs-keys-pub-prod.cdn-apple.com` 用于为连接的设备安装系统。
+
+`xp.apple.com` 虽列在 Apple 的 Software updates 表内，但该表未注明具体用途；[macOS 更新日志分析](https://eclecticlight.co/2026/03/04/how-macos-26-tahoe-updates-2-finite-state-machines/)显示它用于提交更新进度事件。为避免将尚未证实为更新/恢复传输所必需的上报流量一律强制直连，暂不加入例外列表；它仍按 `苹果服务` 既有策略路由。离线测试显式覆盖这项排除。
+
+已有私人 Profile 不会自动获得模板新增的资源引用。增量迁移时，将新模板中 `apple-updates.list` 的完整引用行加到现有 `[filter_remote]` 顶部并刷新该资源。若有个人 `[filter_local]` 主机覆盖，也应检查其实际优先级；本规则不能覆盖全局代理模式或上游路由器的再次分流。
+
+本机验收应查看 QX 请求日志中的实际命中规则、`direct` 策略、连接地址，并同时观察系统下载字节数。CI 只验证规则范围和资源先后顺序。若所在网络必须经代理访问更新服务，可禁用此资源，让请求重新由“苹果服务”策略处理。
+
+## 私人节点 DNS 维护
+
+节点域名专用 DNS 仍由私人 Profile 管理，不把机场域名、端点或订阅写入模板。域名绑定的 DoH 保留每个端点独立一行、每行重复域名匹配项的写法。当前使用环境反馈：合并到同一行无效，因此不将默认 DoH 的逗号分隔示例套用于节点域名专用 DNS。[QX 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf) 分别展示了默认多 DoH 和单个域名绑定 DoH，并未给出域名绑定多个端点合并后的示例。
+
+检查端点必须发送有效 DNS 查询并校验响应；`HEAD /dns-query` 返回 405 只说明 HTTP 服务可达。若某端点持续 TLS 握手失败，应先确认其他端点能解析实际节点域名，再移除失效端点。保留普通域名的默认 DNS 设置；节点 DNS 不应扩展成全局解析器。
 
 ## Spotify
 
