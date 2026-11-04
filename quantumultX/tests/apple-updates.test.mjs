@@ -38,10 +38,10 @@ for (const platform of ["ios", "macos"]) {
       .filter(line => line && !/^[#;]/.test(line));
     const entries = lines.filter(line => line.includes("/" + resource + ","));
     assert.equal(entries.length, 1, "load update exceptions exactly once");
-    const inserted = lines.filter(line => /,\\s*inserted-resource=true(?:,|$)/.test(line));
+    const inserted = lines.filter(line => /,\s*inserted-resource=true(?:,|$)/.test(line));
     assert.equal(inserted.length, 1, "only the narrow Pages list should be inserted");
     assert.match(inserted[0], /\/rules\/services\/github-pages\.list,/);
-    assert.equal(lines.filter(line => !/,\\s*inserted-resource=true(?:,|$)/.test(line))[0],
+    assert.equal(lines.filter(line => !/,\s*inserted-resource=true(?:,|$)/.test(line))[0],
       entries[0], "updates must precede ordinary ad-block and broad Apple filters");
     assert.match(entries[0], /,\s*force-policy=direct(?:,|$)/);
     assert.match(entries[0], /,\s*enabled=true(?:,|$)/);
