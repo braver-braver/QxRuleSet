@@ -7,6 +7,7 @@ on:
       - 'quantumultX/qx-macos.conf'
       - 'quantumultX/tests/**'
       - 'quantumultX/rules/services/apple*.list'
+      - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   push:
@@ -19,6 +20,7 @@ on:
       - 'quantumultX/qx-macos.conf'
       - 'quantumultX/tests/**'
       - 'quantumultX/rules/services/apple*.list'
+      - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   workflow_dispatch:
