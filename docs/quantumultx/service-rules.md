@@ -10,6 +10,8 @@ quantumultX/rules/services/
 ├── apple-updates.list
 ├── appletv.list
 ├── bilibili.list
+├── bilibili-video.list
+├── bilibili-pcdn.list  # 可选、默认关闭
 ├── bing.list
 ├── github.list
 ├── google.list
@@ -36,7 +38,9 @@ quantumultX/rules/services/
 | `appletv.list` | `AppleTV服务` | Apple TV 视频服务 |
 | `apple.list` | `苹果服务` | Apple / iCloud / App Store / Apple 基础服务 |
 | `apple-updates.list` | `direct` | Apple 系统更新、恢复与 Rosetta 更新的精确主机 |
-| `bilibili.list` | `BiliBili` | Bilibili Web / App / 视频 CDN |
+| `bilibili.list` | `BiliBili` | Bilibili Web / App / API、通用媒体和历史 Profile 兼容 |
+| `bilibili-video.list` | `BiliBili视频` | 可独立选择出口的视频传输主机（默认继承 `BiliBili`） |
+| `bilibili-pcdn.list`（可选） | `reject` | **默认关闭**，仅在确认特定 PCDN 主机异常后用于 A/B 排查 |
 | `wechat.list` | `direct` | WeChat / Weixin / 微信支付及兼容 IP |
 
 这些 ruleset 由 `qx-macos.conf` 的 `[filter_remote]` 引用，并使用 `force-policy` 绑定到对应策略。
@@ -60,6 +64,20 @@ quantumultX/rules/services/
 节点域名专用 DNS 仍由私人 Profile 管理，不把机场域名、端点或订阅写入模板。域名绑定的 DoH 保留每个端点独立一行、每行重复域名匹配项的写法。当前使用环境反馈：合并到同一行无效，因此不将默认 DoH 的逗号分隔示例套用于节点域名专用 DNS。[QX 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf) 分别展示了默认多 DoH 和单个域名绑定 DoH，并未给出域名绑定多个端点合并后的示例。
 
 检查端点必须发送有效 DNS 查询并校验响应；`HEAD /dns-query` 返回 405 只说明 HTTP 服务可达。若某端点持续 TLS 握手失败，应先确认其他端点能解析实际节点域名，再移除失效端点。保留普通域名的默认 DNS 设置；节点 DNS 不应扩展成全局解析器。
+
+## Bilibili 视频卡顿排查（2026-11-07）
+
+视频 CDN 不是仅靠增加 `bilivideo.com` / `bilivideo.cn` 就能修复的：它们已由原有 `bilibili.list` 覆盖。播放器的实际传输主机可能来自商业镜像、BCache 或 PCDN；连接速度与地区、ISP、DNS 结果、所选出口以及具体视频都有关系。参考 [PCDN/CDN 分型和排查](https://linux.do/t/topic/642419) 以及 [PCDN 拦截导致 TV 播放失败的反馈](https://github.com/privacy-protection-tools/anti-AD/issues/1121)。这些是社区现场报告，不能证明某一用户的具体卡顿根因。
+
+**默认行为保持不变**：iOS/macOS 仍使用 `BiliBili` 选择网页、API 与地域版权相关服务；新增 `static=BiliBili视频, BiliBili, direct, ...` 的默认第一候选是已有 `BiliBili`，因此仍继承用户此前对该组的直连或代理选择。仅当明确手动切换 `BiliBili视频` 时才单独调整视频 CDN 的出口，不会同时把网页/API 改到另一地区。
+
+`bilibili-video.list` 只包含精确 Bilibili 视频分发范围：`bilivideo.cn` / `bilivideo.com`、两个明确的 Akamai UPOS 镜像、一个 `bilibilivideo.com` 海外镜像，以及 `v1d.szbdyd.com` 的 PCDN 子树。它通过 `force-policy=BiliBili视频, inserted-resource=true` 加载，在普通本地 `geoip, cn, direct` 之前按主机匹配，避免改变视频策略组后又被本地 GeoIP 直连覆盖。没有接管整个 `akamaized.net` / `bilibilivideo.com` / `szbdyd.com`，也没有维护 IP 段或改动全局 DNS。
+
+`bilibili-pcdn.list` 采用 `force-policy=reject, inserted-resource=true`，但在**两个模板中都为 `enabled=false`**。仅在 QX 请求记录明确显示 `mcdn.bilivideo.cn`、`mcdn.bilivideo.com` 或 `v1d.szbdyd.com` 的具体节点缓冲异常时，才可以短暂开启此资源做同一视频、同一清晰度的对照实验。社区已有启用类似黑名单后 Bilibili TV / 直播无法正常播放的反馈；若出现重试、播放失败或直播故障，立即关闭。不要阻断全体 `biliapi.net` 或以共享 CDN 关键词批量 `reject`。播放器若走 `IP:Port` 的 PCDN，仅凭域名规则无法识别。
+
+**现有私人 Profile 的增量迁移**：先手动增加新 `BiliBili视频` 策略组，再从最新版 iOS/macOS 模板复制两条 `[filter_remote]` 引用（PCDN 资源保持关闭），刷新对应远端资源并检查规则命中。切勿只导入新 ruleset 却没有定义 `BiliBili视频` 策略组。仓库不会自动修改私人订阅、节点凭据或个人 Profile。
+
+**实测步骤**：在 QX 的请求记录中记录视频和音频分片真正的 `Host`、命中策略、最终连接方式、失败重试与端口；播放器「视频统计信息」可辅助识别 DASH 视频/音频 CDN。保持相同视频与画质，依次比较 `BiliBili视频=BiliBili`、`direct` 和一个已确认可达的香港/台湾节点。若依旧卡顿，需要进一步检查运营商路径、具体 CDN 或浏览器解码与缓冲，不应宣称规则已经解决播放问题。离线 CI 仅验证配置结构和命中范围，不代表真实带宽或 QX 真机效果。
 
 ## Spotify
 
