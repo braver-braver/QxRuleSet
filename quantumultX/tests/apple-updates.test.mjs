@@ -38,7 +38,21 @@ for (const platform of ["ios", "macos"]) {
       .filter(line => line && !/^[#;]/.test(line));
     const entries = lines.filter(line => line.includes("/" + resource + ","));
     assert.equal(entries.length, 1, "load update exceptions exactly once");
-    assert.equal(lines[0], entries[0], "updates must precede ad-block and broad Apple filters");
+    // Narrow inserted resources are evaluated before ordinary local/remote rules.
+    // PR #25 may also add github-pages.list; it must not disturb Apple priority.
+    const inserted = lines.filter(line => /,\s*inserted-resource=true(?:,|$)/.test(line));
+    const allowed = ["bilibili-pcdn.list", "bilibili-video.list", "github-pages.list"];
+    for (const line of inserted) {
+      assert.ok(allowed.some(name => line.includes("/rules/services/" + name + ",")),
+        "unexpected inserted resource: " + line);
+    }
+    for (const name of ["bilibili-pcdn.list", "bilibili-video.list"]) {
+      assert.equal(inserted.filter(line => line.includes("/rules/services/" + name + ",")).length, 1,
+        "expected one Bilibili inserted resource: " + name);
+    }
+    const ordinary = lines.filter(line => !/,\s*inserted-resource=true(?:,|$)/.test(line));
+    assert.equal(ordinary[0], entries[0],
+      "Apple updates must precede ordinary ad-block and broad Apple filters");
     assert.match(entries[0], /,\s*force-policy=direct(?:,|$)/);
     assert.match(entries[0], /,\s*enabled=true(?:,|$)/);
     assert.match(entries[0], /,\s*opt-parser=false(?:,|$)/);
