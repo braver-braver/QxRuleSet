@@ -71,7 +71,7 @@ quantumultX/rules/services/
 
 **默认行为保持不变**：iOS/macOS 仍使用 `BiliBili` 选择网页、API 与地域版权相关服务；新增 `static=BiliBili视频, BiliBili, direct, ...` 的默认第一候选是已有 `BiliBili`，因此仍继承用户此前对该组的直连或代理选择。仅当明确手动切换 `BiliBili视频` 时才单独调整视频 CDN 的出口，不会同时把网页/API 改到另一地区。
 
-`bilibili-video.list` 只包含精确 Bilibili 视频分发范围：`bilivideo.cn` / `bilivideo.com`、两个明确的 Akamai UPOS 镜像、一个 `bilibilivideo.com` 海外镜像，以及 `v1d.szbdyd.com` 的 PCDN 子树。它通过 `force-policy=BiliBili视频, inserted-resource=true` 加载，在普通本地 `geoip, cn, direct` 之前按主机匹配，避免改变视频策略组后又被本地 GeoIP 直连覆盖。没有接管整个 `akamaized.net` / `bilibilivideo.com` / `szbdyd.com`，也没有维护 IP 段或改动全局 DNS。
+`bilibili-video.list` **仅对已经在旧 `bilibili.list` 中归类的视频主机提供独立出口**：`bilivideo.cn` / `bilivideo.com` 和精确 `upos-hz-mirrorakam.akamaized.net`。其他国际版/港澳台镜像及第三方 `v1d.szbdyd.com` 不加入默认视频资源，避免未经验证就改变原有分流；后者只作为可选 PCDN 拦截目标。它通过 `force-policy=BiliBili视频, inserted-resource=true` 加载，在普通本地 `geoip, cn, direct` 之前按主机匹配，避免改变视频策略组后又被本地 GeoIP 直连覆盖。没有接管整个 `akamaized.net` / `bilibilivideo.com` / `szbdyd.com`，也没有维护 IP 段或改动全局 DNS。
 
 `bilibili-pcdn.list` 采用 `force-policy=reject, inserted-resource=true`，但在**两个模板中都为 `enabled=false`**。仅在 QX 请求记录明确显示 `mcdn.bilivideo.cn`、`mcdn.bilivideo.com` 或 `v1d.szbdyd.com` 的具体节点缓冲异常时，才可以短暂开启此资源做同一视频、同一清晰度的对照实验。社区已有启用类似黑名单后 Bilibili TV / 直播无法正常播放的反馈；若出现重试、播放失败或直播故障，立即关闭。不要阻断全体 `biliapi.net` 或以共享 CDN 关键词批量 `reject`。播放器若走 `IP:Port` 的 PCDN，仅凭域名规则无法识别。
 
