@@ -1,0 +1,14 @@
+## BiliBili video delivery hosts (separate selectable policy)
+## version: 0.1.0
+## updated: 2026-11-07
+## Loaded with force-policy=BiliBili视频 and inserted-resource=true.
+## Existing BiliBili API, region licensing and static-asset traffic remain unchanged.
+## Captures popular commercial mirrors, ordinary CDN and known PCDN hosts.
+## Does not alter signed DASH URLs or force a particular CDN/region.
+
+HOST-SUFFIX,bilivideo.cn,BiliBili视频
+HOST-SUFFIX,bilivideo.com,BiliBili视频
+HOST,upos-hz-mirrorakam.akamaized.net,BiliBili视频
+HOST,upos-bstar-mirrorakam.akamaized.net,BiliBili视频
+HOST,upos-sz-mirrorasiaov.bilibilivideo.com,BiliBili视频
+HOST-SUFFIX,v1d.szbdyd.com,BiliBili视频
