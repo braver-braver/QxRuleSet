@@ -22,16 +22,14 @@ const hosts = [
   'upos-sz-mirroraliov.bilivideo.com',
   'xy1.mcdn.bilivideo.cn',
   'cn-jxnc-cmcc-bcache-06.bilivideo.com',
-  'upos-hz-mirrorakam.akamaized.net',
-  'upos-bstar-mirrorakam.akamaized.net',
-  'upos-sz-mirrorasiaov.bilibilivideo.com',
-  'v1d.szbdyd.com',
-  'edge.v1d.szbdyd.com'
+  'upos-hz-mirrorakam.akamaized.net'
 ]
 const unrelated = [
   'api.bilibili.com', 'www.bilibili.com', 'apiintl.biliapi.net',
   'tv.bilibili.com', 'hdslb.com', 'i0.hdslb.com', 'b23.tv',
   'other.akamaized.net', 'unrelated.bilibilivideo.com',
+  'upos-bstar-mirrorakam.akamaized.net', 'upos-sz-mirrorasiaov.bilibilivideo.com',
+  'v1d.szbdyd.com', 'edge.v1d.szbdyd.com',
   'szbdyd.com', 'mountaintoys.cn', 'cdn.jsdelivr.net',
   'upos-hz-mirrorakam.akamaized.net.evil.example',
   'evil-mcdn.bilivideo.net'
@@ -42,7 +40,7 @@ test('video rules cover observed Bilibili player delivery hosts only', () => {
   for (const host of unrelated) assert.ok(!video.some(r => matches(r, host)), host)
   assert.ok(video.every(r => r.length === 3 &&
     ['HOST', 'HOST-SUFFIX'].includes(r[0]) && r[2] === 'BiliBili视频'))
-  assert.equal(video.length, 6, 'only six narrow CDN patterns')
+  assert.equal(video.length, 3, 'only the three CDN patterns already classified by legacy BiliBili rules')
 })
 
 test('legacy Bilibili service/API rules remain available and direct by default', () => {
@@ -59,10 +57,14 @@ test('optional PCDN policy covers only known problematic hostname families', () 
     ['HOST-SUFFIX', 'mcdn.bilivideo.com', 'reject'],
     ['HOST-SUFFIX', 'v1d.szbdyd.com', 'reject']
   ])
-  for (const host of ['mcdn.bilivideo.cn', 'xx.mcdn.bilivideo.com', 'v1d.szbdyd.com']) {
+  for (const host of ['mcdn.bilivideo.cn', 'xx.mcdn.bilivideo.com']) {
     assert.ok(pcdn.some(r => matches(r, host)), host)
     assert.ok(video.some(r => matches(r, host)), 'opt-in rule must override a video-route match')
   }
+  assert.ok(pcdn.some(r => matches(r, 'v1d.szbdyd.com')),
+    'known third-party PCDN can be rejected only when opt-in is enabled')
+  assert.ok(!video.some(r => matches(r, 'v1d.szbdyd.com')),
+    'do not change routing of the third-party PCDN by default')
   for (const host of ['upos-sz-mirrorali.bilivideo.com', 'cn-jxnc-cmcc-bcache-06.bilivideo.com',
     'www.bilibili.com', 'pcdn.biliapi.net', 'mountaintoys.cn',
     'bad.v1d.szbdyd.com.evil.example']) {
