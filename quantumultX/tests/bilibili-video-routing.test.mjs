@@ -1,5 +1,5 @@
 // Offline regression: separate Bilibili video CDN routing without changing Bilibili API.
- // This cannot establish QX runtime rule hits, region licensing, or network throughput.
+// This cannot establish QX runtime rule hits, region licensing, or network throughput.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
