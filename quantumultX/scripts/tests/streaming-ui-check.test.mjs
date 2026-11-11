@@ -11,7 +11,7 @@ async function probe(overrides = {}) {
   const defaults = {
     'api.anthropic.com': { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}' },
     'api.openai.com': { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' },
-    'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"INVALID_ARGUMENT","message":"API_KEY_INVALID"}}' },
+    'generativelanguage.googleapis.com': { statusCode: 400, body: "{\"error\":{\"code\":400,\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"API_KEY_INVALID\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"}}]}}" },
     'www.netflix.com': { statusCode: 404, body: '' },
     'www.youtube.com': { statusCode: 200, body: '<html><title>Premium</title></html>' },
     'www.disneyplus.com': { statusCode: 200, body: '<html><title>Disney+</title></html>' },
@@ -563,4 +563,18 @@ test('ChatGPT/Gemini web checks explicitly disable automatic redirects', async (
     assert.ok(req, host)
     assert.equal(req.opts.redirection, false)
   }
+})
+
+test('Gemini HTTP 200 without the official models response is inconclusive', async () => {
+  const bogus = await probe({
+    'generativelanguage.googleapis.com': { statusCode: 200, body: '<html>Proxy Login</html>' }
+  })
+  assert.ok(bogus.includes('Gemini API: </b>响应格式不明 (200)'), bogus)
+  const official = await probe({
+    'generativelanguage.googleapis.com': {
+      statusCode: 200,
+      body: '{"models":[{"name":"models/gemini-example","version":"001"}]}'
+    }
+  })
+  assert.ok(official.includes('Gemini API: </b>接口响应成功 (解锁未证实)'), official)
 })
