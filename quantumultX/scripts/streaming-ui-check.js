@@ -621,7 +621,9 @@ function testGeminiAPI() {
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
-      let body = (resp.body || '').toLowerCase()
+      // Keep the original case for structured Google API fields:
+      // INVALID_ARGUMENT and API_KEY_INVALID are case-sensitive.
+      let body = resp.body || ''
 
       // A 400 may be FAILED_PRECONDITION (unsupported region) or an
       // INVALID_ARGUMENT that isn't about the test API key.
