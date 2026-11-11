@@ -578,3 +578,17 @@ test('Gemini HTTP 200 without the official models response is inconclusive', asy
   })
   assert.ok(official.includes('Gemini API: </b>接口响应成功 (解锁未证实)'), official)
 })
+
+test('Google China Location header without an HTTP redirect does not prove mainland routing', async () => {
+  for (const statusCode of [200, 201, 204, 403]) {
+    const out = await probe({
+      'www.google.com': {
+        statusCode,
+        headers: { Location: 'https://www.google.cn/search' },
+        body: statusCode === 200 ? '<html><title>Google</title></html>' : ''
+      }
+    })
+    assert.ok(!out.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), String(statusCode))
+    if (statusCode === 200) assert.ok(out.includes('未观察到大陆跳转'), out)
+  }
+})
