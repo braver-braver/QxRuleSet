@@ -157,7 +157,7 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 - **OpenAI API**：仅将 HTTP 401 且带有结构化 `error.code=invalid_api_key` 的响应报告为「接口可达（未认证）」。代理/网关生成的普通 401 改为「状态不明」。HTTP 451 单独报告「地区/法律限制」，401 中明确的地区限制不再被认证分支覆盖。
 - **Gemini API（GenerateContent/Generative Language）**：对 HTTP 400/401 要求 Google `error.details[]` 中包含 `google.rpc.ErrorInfo`、`reason=API_KEY_INVALID`、`domain=googleapis.com` 及 `metadata.service=generativelanguage.googleapis.com`，且 HTTP 状态和 `error.status` 相符。泛用 400、缺字段、错误的服务域名保持「状态不明」。仅真实 `models` JSON 响应才能把 HTTP 200 标为「接口响应成功（解锁未证实）」。`FAILED_PRECONDITION` 等明确地区拒绝优先处理。
 - **ChatGPT Web / Gemini Web**：拒绝把陌生站点的 301/302 等跳转、协议降级、用户信息伪装和空 HTTP 204 页面算作可达；只认可目标服务/明确登录主机的 HTTPS 跳转。Cloudflare 的 `cf-mitigated: challenge` 以及页面实际 `<title>` 为验证标题时标为「验证拦截」，普通页面 JavaScript 内的相关字串不构成证据。
-- **Google 送中**：只检查重定向 URL 的**真实 hostname** 是否为 `google.cn` / `google.com.cn` 或其子域名，不能仅凭 URL 查询参数出现 `google.cn` 就报告“可能送中”。仍不以简体页面或语言参数推断节点地区。
+- **Google 送中**：仅在 **HTTP 3xx 真正重定向** 时检查 `Location` URL 的**真实 hostname** 是否为 `google.cn` / `google.com.cn` 或其子域名；HTTP 200/201/204 等携带 `Location` 也不能当作跳转证据，不能仅凭 URL 查询参数出现 `google.cn` 就报告“可能送中”。仍不以简体页面或语言参数推断节点地区。
 - **稳定性**：保留 8.5 秒全局看门狗、统一 `$done`、2.0–6.2 秒各项请求上限、无登录探测、selftest 以及部分结果回传机制。
 
 对照资料：[OpenAI API 官方错误码](https://developers.openai.com/api/docs/guides/error-codes)、[Google Gemini GenerateContent API 官方错误格式](https://ai.google.dev/gemini-api/docs/generate-content/api-errors)、[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)。
