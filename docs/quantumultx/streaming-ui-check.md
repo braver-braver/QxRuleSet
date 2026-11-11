@@ -46,7 +46,7 @@ Quantumult X `event-interaction` 脚本。
 - `$configuration.sendMessage`
 - `$done`
 
-脚本中的测试 API Key 仅用于根据 HTTP 状态判断服务端点是否可达，不应替换为真实账号密钥。
+脚本使用明显无效的测试 API Key；仅当 HTTP 状态及服务端结构化错误**一致**时才将结果标记为「接口可达（未认证）」，不应替换为真实账号密钥。该结果不证明模型调用权限、账户订阅或地区许可。
 
 ## 修改检查
 
@@ -149,3 +149,24 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 - [第三方 Claude IP 检测](https://ip.net.coffee/claude/) 仅能提供出口 IP、浏览器环境及网络质量线索，不能替代通过 `$task.fetch` 和明确 `opts.policy` 对目标节点的检查；第三方信任分不等于 Anthropic 官方账号判定。
 - Claude Web 请求设为 `redirection=false`：仅允许明确属于 Claude/Anthropic 的登录跳转；未知重定向、Cloudflare challenge 跳转以及空页面 HTTP 204 不认定为网页正常。HTTP 200 若 HTML 标题明确显示人机验证，也不再被误判为可访问的 Claude 页面。
 - 回归测试采用脱敏 QX 模拟响应；未验证 Quantumult X 真机、真实代理节点或登录账号模型调用。
+
+## 2026-11-11 认证响应与重定向核验（v3.5.0）
+
+本轮针对无效 Key 检测中出现的**状态码误判**和网页跳转误判做保守修复，不新增登录、真实 API Key、视频播放或账户查询。
+
+- **OpenAI API**：仅将 HTTP 401 且带有结构化 `error.code=invalid_api_key` 的响应报告为「接口可达（未认证）」。代理/网关生成的普通 401 改为「状态不明」。HTTP 451 单独报告「地区/法律限制」，401 中明确的地区限制不再被认证分支覆盖。
+- **Gemini API（GenerateContent/Generative Language）**：对 HTTP 400/401 要求 Google `error.details[]` 中包含 `google.rpc.ErrorInfo`、`reason=API_KEY_INVALID`、`domain=googleapis.com` 及 `metadata.service=generativelanguage.googleapis.com`，且 HTTP 状态和 `error.status` 相符。泛用 400、缺字段、错误的服务域名保持「状态不明」。仅真实 `models` JSON 响应才能把 HTTP 200 标为「接口响应成功（解锁未证实）」。`FAILED_PRECONDITION` 等明确地区拒绝优先处理。
+- **ChatGPT Web / Gemini Web**：拒绝把陌生站点的 301/302 等跳转、协议降级、用户信息伪装和空 HTTP 204 页面算作可达；只认可目标服务/明确登录主机的 HTTPS 跳转。Cloudflare 的 `cf-mitigated: challenge` 以及页面实际 `<title>` 为验证标题时标为「验证拦截」，普通页面 JavaScript 内的相关字串不构成证据。
+- **Google 送中**：只检查重定向 URL 的**真实 hostname** 是否为 `google.cn` / `google.com.cn` 或其子域名，不能仅凭 URL 查询参数出现 `google.cn` 就报告“可能送中”。仍不以简体页面或语言参数推断节点地区。
+- **稳定性**：保留 8.5 秒全局看门狗、统一 `$done`、2.0–6.2 秒各项请求上限、无登录探测、selftest 以及部分结果回传机制。
+
+对照资料：[OpenAI API 官方错误码](https://developers.openai.com/api/docs/guides/error-codes)、[Google Gemini GenerateContent API 官方错误格式](https://ai.google.dev/gemini-api/docs/generate-content/api-errors)、[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)。
+
+回归命令：
+
+```bash
+node --check quantumultX/scripts/streaming-ui-check.js
+node --test quantumultX/scripts/tests/*.test.mjs
+```
+
+**限制**：CI 是模拟 Quantumult X `$task.fetch`、策略状态与响应格式的离线测试。它不能替代 iOS/macOS 真机、真实节点出口、账号订阅或实际播放验证。合并后仍需 QX 客户端手动刷新远程脚本缓存。
