@@ -686,7 +686,8 @@ function testGoogleCN() {
     let body = (resp.body || '').toLowerCase()
     let loc = getHeader(resp.headers, 'location').toLowerCase()
     const redirectHost = redirectHostname(loc, false)
-    if (['google.cn', 'google.com.cn'].some(domain =>
+    // Location is redirect evidence only for an actual HTTP 3xx response.
+    if (s >= 300 && s < 400 && ['google.cn', 'google.com.cn'].some(domain =>
         redirectHost === domain || redirectHost.endsWith('.' + domain))) {
       result.GoogleCN = "<b>Google 送中: </b>可能 (跳转 Google 中国站) 🇨🇳⚠️"
     } else if (loc.indexOf('hl=zh-cn') !== -1) {
