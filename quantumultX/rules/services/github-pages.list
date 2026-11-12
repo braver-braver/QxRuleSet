@@ -1,0 +1,8 @@
+## GitHub Pages: high-priority domain-only routing
+## version: 0.1.0
+## updated: 2026-11-04
+## Loaded with force-policy=GitHub服务 and inserted-resource=true.
+## Keep the hostname before local GEOIP direct to avoid DNS/IP misrouting.
+## Do not add GitHub Pages IP ranges, broad CDNs or unrelated GitHub hosts.
+
+HOST-SUFFIX,github.io,GitHub服务

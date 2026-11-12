@@ -1,6 +1,6 @@
 /**
- * QxRuleSet Traffic Check v1.0.0
- * Updated: 2026-10-09T10:57:33+08:00
+ * QxRuleSet Traffic Check v1.0.1
+ * Updated: 2026-11-12T11:39:00+08:00
  * Read-only QX configuration API. No network calls or persistent data.
  */
 (function () {
@@ -49,7 +49,7 @@
       return;
     }
     var accepted = new Set(candidates);
-    var aggregate = {};
+    var aggregate = Object.create(null);
     var tcp = { rx: 0, tx: 0 }, udp = { rx: 0, tx: 0 };
     Object.keys(stats).forEach(function (key) {
       var row = stats[key];
@@ -61,7 +61,7 @@
       tx = Number.isFinite(tx) && tx > 0 ? tx : 0;
       var counter = type === "udp" ? udp : tcp;
       counter.rx += rx; counter.tx += tx;
-      if (!aggregate[row.name]) aggregate[row.name] = 0;
+      if (aggregate[row.name] === undefined) aggregate[row.name] = 0;
       aggregate[row.name] += rx + tx;
     });
     var total = tcp.rx + tcp.tx + udp.rx + udp.tx;

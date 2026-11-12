@@ -1,13 +1,13 @@
 /***
- * 服务解锁检测 v3.1.2 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.5.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-09T10:57:33+08:00
+ * 更新: 2026-11-12
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
- * ★ Google 送中检测: 判断节点 IP 是否被 Google 判定为大陆网络（大陆重定向/强制简体）
+ * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
  * ○ 流媒体:   Netflix / YouTube Premium / Disney+
  *
  * For Quantumult-X 598+ ONLY!!
@@ -22,20 +22,22 @@
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 const arrow = " ➟ "
-// Trace/API 请求通常很快，网页和流媒体在移动网络上需要更长时间。
+// 整个 event-interaction 必须在有限时间内交还 UI。
+// 不依赖 QX 默认 HTTP 超时：单项请求在脚本内单独限时，超时不重试。
+// 部分节点可能慢/拒绝连接，返回部分结果优于没有任何界面响应。
+const SCRIPT_DEADLINE_MS = 8500
+const POLICY_LOOKUP_TIMEOUT_MS = 750
 const TIMEOUTS = {
-  trace: 4000,
-  api: 7000,
-  web: 9000,
-  streaming: 10000
+  trace: 2000,
+  api: 4500,
+  web: 5200,
+  streaming: 6200
 }
-const MAX_ATTEMPTS = 2
-const RETRY_DELAY = 600
 
 // --- Claude ---
 const CLAUDE_WEB_URL     = 'https://claude.ai'
 const CLAUDE_TRACE_URL   = 'https://claude.ai/cdn-cgi/trace'
-const CLAUDE_API_URL     = 'https://api.anthropic.com/v1/messages'
+const CLAUDE_API_URL     = 'https://api.anthropic.com/v1/models'
 
 // --- ChatGPT / OpenAI ---
 const CHATGPT_WEB_URL    = 'https://chatgpt.com'
@@ -44,7 +46,7 @@ const OPENAI_API_URL     = 'https://api.openai.com/v1/models'
 
 // --- Gemini / Google AI ---
 const GEMINI_WEB_URL     = 'https://gemini.google.com/app'
-const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models?key=AIzaTest00000000000000000000000000'
+const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models?key=invalid-key-for-reachability-test'
 
 // --- Google 送中检测 ---
 // 命中大陆网络时，Google 会返回 zh-CN 简体页面 / 302 到 google.cn / 触发 sorry 人机验证
@@ -55,13 +57,35 @@ const REGION_FALLBACK_URL  = 'https://ipapi.co/json/'
 // --- 流媒体 ---
 const NETFLIX_URL        = 'https://www.netflix.com/title/81280792'
 const YOUTUBE_URL        = 'https://www.youtube.com/premium'
-const DISNEY_API_URL     = 'https://disney.api.edge.bamgrid.com/graph/v1/device/graphql'
-const DISNEY_TOKEN       = 'ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84'
+// Anonymous homepage probe only; no embedded token or playback claims.
+const DISNEY_WEB_URL     = 'https://www.disneyplus.com/'
 
 // ===================== QuantumultX 选项 =====================
 
-var opts           = { policy: $environment.params }
-var opts_noRedirect = { policy: $environment.params, redirection: false }
+// 从策略/节点交互菜单调用时 params 为目标策略。
+// 若从其他任务入口运行且没有 params，应回退到当前路由，不能传 policy: undefined。
+const SELECTED_POLICY = String(
+  (typeof $environment !== 'undefined' && $environment && $environment.params) || ''
+).trim()
+var opts           = SELECTED_POLICY ? { policy: SELECTED_POLICY } : {}
+var opts_noRedirect = Object.assign({}, opts, { redirection: false })
+
+// #mode=selftest on the QX task URL verifies that the script can execute
+// without depending on proxies, DNS, HTTP endpoints or policy-state APIs.
+function scriptMode() {
+  try {
+    if (typeof $environment === 'undefined' || !$environment) return 'full'
+    const variables = $environment.variables
+    if (variables && typeof variables.mode === 'string') {
+      return variables.mode.toLowerCase() === 'selftest' ? 'selftest' : 'full'
+    }
+    const source = String($environment.sourcePath || '')
+    return /[#&]mode=selftest(?:&|$)/i.test(source) ? 'selftest' : 'full'
+  } catch (_) {
+    return 'full'
+  }
+}
+const SCRIPT_MODE = scriptMode()
 
 // ===================== 国旗映射表 =====================
 
@@ -147,26 +171,113 @@ function hasStructuredRegionBlock(body) {
 
 function hasExplicitRegionMessage(body) {
   let text = (body || '').toLowerCase()
-  return text.indexOf('country not supported') !== -1 ||
+  return text.indexOf('user location is not supported') !== -1 ||
+    text.indexOf('location is not supported for the api use') !== -1 ||
+    text.indexOf('country not supported') !== -1 ||
     text.indexOf('not available in your country') !== -1 ||
     text.indexOf('not available in your region') !== -1 ||
-    text.indexOf('service is not available in your territory') !== -1
+    text.indexOf('service is not available in your territory') !== -1 ||
+    text.indexOf('not allowed from unsupported countries') !== -1 ||
+    text.indexOf('country, region, or territory not supported') !== -1
 }
 
 function hasApiRegionBlock(body) {
   let text = (body || '').toLowerCase()
-  return hasStructuredRegionBlock(text) ||
+  return (/"(?:status|code)"\s*:\s*"(?:failed_precondition|unsupported_country)"/.test(text) && /location|region|country/.test(text)) ||
+    hasStructuredRegionBlock(text) ||
     hasExplicitRegionMessage(text) ||
     /(?:user )?location[^.]{0,40}(?:not supported|unsupported)/.test(text)
 }
 
 function isBotChallenge(resp, body) {
-  let text = (body || '').toLowerCase()
-  return getHeader(resp && resp.headers, 'cf-mitigated').toLowerCase() === 'challenge' ||
-    text.indexOf('challenge-platform') !== -1 ||
+  // A regular HTML bundle can contain Cloudflare challenge strings even on
+  // HTTP 200. Prefer the explicit mitigation header; otherwise only inspect
+  // challenge wording on denial/unavailable responses.
+  if (getHeader(resp && resp.headers, 'cf-mitigated').toLowerCase() === 'challenge') {
+    return true
+  }
+  const status = Number(resp && resp.statusCode)
+  if (status !== 403 && status !== 503) return false
+  const text = (body || '').toLowerCase()
+  return text.indexOf('challenge-platform') !== -1 ||
     text.indexOf('cf-chl-') !== -1 ||
     text.indexOf('checking your browser') !== -1 ||
     text.indexOf('verify you are human') !== -1
+}
+
+// Only an HTML <title> from an actual response may identify a human
+// verification page. JavaScript bundles often contain challenge strings.
+function webPageTitle(body) {
+  const match = String(body || '').match(/<title[^>]*>([^<]*)<\/title>/i)
+  return match ? match[1].trim().toLowerCase() : ''
+}
+
+function isWebChallenge(resp, body) {
+  return isBotChallenge(resp, body) ||
+    /^(?:just a moment\b|checking your browser\b|verify you are human\b)/i.test(webPageTitle(body))
+}
+
+// Do not accept a redirect just because its query string or username mentions
+// a trusted domain. Protocol-relative URLs, HTTP downgrade and unknown login
+// portals are not evidence that the requested AI website is reachable.
+function redirectHostname(location, httpsOnly) {
+  const pattern = httpsOnly
+    ? /^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i
+    : /^https?:\/\/([a-z0-9.-]+)(?::\d{1,5})?(?:[\/?#]|$)/i
+  const match = String(location || '').trim().match(pattern)
+  return match ? match[1].toLowerCase() : ''
+}
+
+function isTrustedWebRedirect(resp, allowedDomains) {
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  const host = redirectHostname(location, true)
+  return !!host && allowedDomains.some(domain =>
+    host === domain || host.endsWith('.' + domain))
+}
+
+function isOpenAIInvalidKeyResponse(body) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    const error = parsed && parsed.error
+    return !!error && typeof error === 'object' && !Array.isArray(error) &&
+      error.code === 'invalid_api_key'
+  } catch (_) {
+    return false
+  }
+}
+
+// The Generative Language REST API uses google.rpc.ErrorInfo with a service
+// identifier. Generic 400/401 bodies from a proxy must remain inconclusive.
+function isGeminiInvalidKeyResponse(body, httpStatus) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    const error = parsed && parsed.error
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return false
+    if (typeof error.code === 'number' && error.code !== httpStatus) return false
+    if (httpStatus === 400 && error.status !== 'INVALID_ARGUMENT') return false
+    if (httpStatus === 401 && error.status !== 'UNAUTHENTICATED') return false
+    if (httpStatus !== 400 && httpStatus !== 401) return false
+    if (!Array.isArray(error.details)) return false
+    return error.details.some(detail =>
+      detail && detail['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' &&
+      detail.reason === 'API_KEY_INVALID' && detail.domain === 'googleapis.com' &&
+      detail.metadata && detail.metadata.service === 'generativelanguage.googleapis.com'
+    )
+  } catch (_) {
+    return false
+  }
+}
+
+function hasGeminiModelsResponse(body) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    return !!parsed && Array.isArray(parsed.models) &&
+      parsed.models.some(model => model && typeof model.name === 'string')
+  } catch (_) {
+    return false
+  }
 }
 
 function escapeHtml(value) {
@@ -178,98 +289,171 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
-// Quantumult X 只会在网络层失败时 reject；HTTP 错误仍然会 resolve。
-// 重试只针对可恢复的网络失败，避免对明确的 4xx/5xx 重复请求。
-// 超时在脚本层实现，避免依赖 Quantumult X 未公开的单请求 timeout 行为。
-function fetchWithRetry(request) {
+// HTTP 4xx/5xx 一般以成功 Promise 返回，网络错误会 reject。
+// QX 的单次 HTTP 请求默认超时约 10 秒；这里强制更短的 JS 层上限。
+// request.timeout 是本脚本的内部参数，不能转发为未文档化的 QX 请求字段。
+// 不对每个错误重试，以免一个慢节点把整份交互报告拖过运行期限。
+function fetchWithTimeout(request) {
   return new Promise((resolve, reject) => {
-    let attempt = 0
-    let run = () => {
-      attempt++
-      let settled = false
-      let timer = setTimeout(() => {
-        if (settled) return
-        settled = true
-        retryOrReject(new Error('timeout'))
-      }, request.timeout)
-      let retryOrReject = err => {
-        if (attempt < MAX_ATTEMPTS) {
-          setTimeout(run, RETRY_DELAY * attempt)
+    let settled = false
+    const timeout = request.timeout || TIMEOUTS.web
+    const fetchRequest = Object.assign({}, request)
+    delete fetchRequest.timeout
+    const timer = setTimeout(() => settle(new Error('timeout')), timeout)
+
+    function settle(error, response) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (!error) {
+        // A missing response must reject rather than throw inside a probe's
+        // .then callback and leave the surrounding Promise unresolved.
+        const status = response && Number(response.statusCode)
+        if (!Number.isInteger(status) || status < 100 || status > 599) {
+          error = new Error('invalid HTTP response')
         } else {
-          reject(err)
+          response = Object.assign({}, response, {
+            statusCode: status,
+            body: typeof response.body === 'string' ? response.body : ''
+          })
         }
       }
-      $task.fetch(request).then(response => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        resolve(response)
-      }, err => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        retryOrReject(err)
-      })
+      if (error) reject(error)
+      else resolve(response)
     }
-    run()
+
+    try {
+      let pending = $task.fetch(fetchRequest)
+      if (!pending || typeof pending.then !== 'function') {
+        settle(new Error('$task.fetch did not return a promise'))
+      } else {
+        pending.then(
+          resp => settle(null, resp),
+          err => settle(err || new Error('network error'))
+        )
+      }
+    } catch (error) {
+      // 部分版本/不合法策略会同步抛错，而非返回 rejected Promise。
+      settle(error)
+    }
   })
 }
 
 function networkErrorLabel(err) {
-  let message = String(err || '').toLowerCase()
+  let message = String((err && (err.error || err.message)) || err || '').toLowerCase()
+  if (message.indexOf('invalid http response') !== -1) return '响应格式异常 ⚠️'
   if (message.indexOf('timeout') !== -1 || message.indexOf('timed out') !== -1) return '检测超时 🚦'
   if (message.indexOf('dns') !== -1 || message.indexOf('getaddrinfo') !== -1 || message.indexOf('resolve') !== -1) return 'DNS 失败 🚫'
   if (message.indexOf('refused') !== -1 || message.indexOf('reset') !== -1 || message.indexOf('connect') !== -1) return '连接失败 🚫'
   return '网络错误 🚦'
 }
 
+// Two trace checks share one fallback IP API call for the selected policy.
+let fallbackRegionPromise = null
+function getFallbackRegion() {
+  if (!fallbackRegionPromise) {
+    fallbackRegionPromise = (async () => {
+      try {
+        const resp = await fetchWithTimeout({
+          url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace,
+          headers: { 'User-Agent': UA }
+        })
+        if (resp.statusCode !== 200) return ''
+        const data = JSON.parse(resp.body || '{}')
+        const code = String(data.country_code || '').toUpperCase()
+        return /^[A-Z]{2}$/.test(code) ? code : ''
+      } catch (_) {
+        return ''
+      }
+    })()
+  }
+  return fallbackRegionPromise
+}
+
 async function getRegion(traceUrl) {
   try {
-    let trace = await fetchWithRetry({ url: traceUrl, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
+    const trace = await fetchWithTimeout({
+      url: traceUrl, opts: opts, timeout: TIMEOUTS.trace,
+      headers: { 'User-Agent': UA }
+    })
     if (trace.statusCode === 200) {
-      let region = regionFromTrace(trace.body)
-      if (region) return region
+      const code = regionFromTrace(trace.body)
+      if (code) return code
     }
-  } catch (e) {}
+  } catch (_) {}
+  return getFallbackRegion()
+}
 
-  try {
-    let fallback = await fetchWithRetry({ url: REGION_FALLBACK_URL, opts: opts, timeout: TIMEOUTS.trace, headers: { 'User-Agent': UA } })
-    if (fallback.statusCode === 200) {
-      let data = JSON.parse(fallback.body || '{}')
-      if (data.country_code) return String(data.country_code).toUpperCase()
-    }
-  } catch (e) {}
-  return ''
+// Accept redirects only to Claude/Anthropic first-party login endpoints.
+// HTTP 302 to a captive portal is not proof that Claude Web loaded.
+function isClaudeTrustedRedirect(resp) {
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  const m = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!m) return false
+  const host = m[1].toLowerCase()
+  if (host === 'anthropic.auth0.com') return true
+  return ['claude.ai', 'claude.com', 'anthropic.com', 'clau.de'].some(domain =>
+    host === domain || host.endsWith('.' + domain))
+}
+
+// Match the official regional-denial landing page, not a string in page JS
+// or in an unrelated redirect query. This uses the real URL host and path.
+function isClaudeRegionUnavailable(resp, titleText) {
+  if (/^app unavailable in region(?:\b|\s|\|)/i.test(String(titleText || '').trim())) return true
+  const status = Number(resp && resp.statusCode)
+  if ([301, 302, 303, 307, 308].indexOf(status) === -1) return false
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location) return false
+  let path = ''
+  if (/^\/(?!\/)/.test(location)) {
+    path = location.split(/[?#]/)[0]
+  } else {
+    const found = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)?(?:[?#]|$)/i)
+    if (!found) return false
+    const host = found[1].toLowerCase()
+    if (!['anthropic.com', 'claude.com', 'claude.ai'].some(domain =>
+      host === domain || host.endsWith('.' + domain))) return false
+    path = found[2] || '/'
+  }
+  return /^\/app-unavailable-in-region\/?$/i.test(path)
 }
 
 // ===================== 检测: Claude Web =====================
 
 function testClaude() {
   return (async () => {
-    let region = await getRegion(CLAUDE_TRACE_URL)
-    let f = flag(region)
+    // 地区探测和 Web 请求并行，避免两次串行超时阻塞整个脚本。
+    let regionPromise = getRegion(CLAUDE_TRACE_URL)
     try {
-      let resp = await fetchWithRetry({
+      let resp = await fetchWithTimeout({
         url: CLAUDE_WEB_URL,
-        opts: opts,
+        opts: opts_noRedirect,
         timeout: TIMEOUTS.web,
         headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
       })
+      let f = flag(await regionPromise)
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
       // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
       // “unavailable/restricted” 可能来自打包脚本，不能单独作为判据。
       let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
-      let deniedTitle = titleMatch && /country not supported|not available in your country/.test(titleMatch[1])
-      let accessDeniedTitle = titleMatch && /access denied/.test(titleMatch[1])
-      if (isBotChallenge(resp, body)) {
+      let title = titleMatch ? titleMatch[1].trim() : ''
+      let deniedTitle = /country not supported|not available in your country/.test(title)
+      let accessDeniedTitle = /access denied/.test(title)
+      let challengeTitle = /^(just a moment\b|checking your browser\b|verify you are human\b)/i.test(title)
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isBotChallenge(resp, body) || challengeTitle) {
         result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
-      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle) {
+      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle || isClaudeRegionUnavailable(resp, title)) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403 || accessDeniedTitle) {
         result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
-        result.Claude = "<b>Claude: </b>入口可达（未验证账号） " + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (redirect && !isClaudeTrustedRedirect(resp)) {
+        result.Claude = "<b>Claude: </b>跳转未确认 (" + s + ") ⚠️"
+      } else if (s === 200 || redirect) {
+        result.Claude = "<b>Claude: </b>网页可达 (解锁未证实)" + arrow + "⟦" + f + "⟧ ⚠️"
       } else {
         result.Claude = "<b>Claude: </b>异常 (" + s + ") ❗️"
       }
@@ -279,40 +463,49 @@ function testClaude() {
   })()
 }
 
+function claudeApiErrorType(body) {
+  try {
+    const response = JSON.parse(String(body || '{}'))
+    // Only the documented Anthropic { type: 'error', error: { type } }
+    // envelope is usable evidence; reject gateway-generated bare codes.
+    if (!response || response.type !== 'error' || !response.error ||
+        typeof response.error.type !== 'string') return ''
+    return response.error.type.toLowerCase()
+  } catch (_) {
+    return ''
+  }
+}
+
 // ===================== 检测: Claude API =====================
 
 function testClaudeAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: CLAUDE_API_URL,
-      method: 'POST',
       opts: opts,
       timeout: TIMEOUTS.api,
       headers: {
-        'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01',
-        'x-api-key': 'sk-ant-api03-test-000000'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'hi' }]
-      })
+        'x-api-key': 'invalid-key-for-reachability-test'
+      }
     }).then(resp => {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // An HTTP response with an invalid test key does not prove service unlock.
-      if (s === 401 || s === 400) {
-        result.ClaudeAPI = "<b>Claude API: </b>端点可达（未鉴权） ⚠️"
-      } else if (s === 429) {
-        result.ClaudeAPI = "<b>Claude API: </b>已限流（地区未判定） ⚠️"
-      } else if (s === 529) {
-        result.ClaudeAPI = "<b>Claude API: </b>服务繁忙（地区未判定） ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.ClaudeAPI = "<b>Claude API: </b>受限 🚫"
+      // Generic HTTP 400/401 can be emitted by a proxy or gateway.
+      // Only structured Anthropic errors support a reachability claim.
+      const errorType = claudeApiErrorType(body)
+      if (s === 451 || hasApiRegionBlock(body)) {
+        result.ClaudeAPI = "<b>Claude API: </b>地区受限 🚫"
+      } else if ((s === 401 && errorType === 'authentication_error') ||
+                 (s === 400 && errorType === 'invalid_request_error')) {
+        result.ClaudeAPI = "<b>Claude API: </b>接口可达 (未认证) ⚠️"
+      } else if (s === 400 || s === 401) {
+        result.ClaudeAPI = "<b>Claude API: </b>状态不明 (" + s + "，未认证) ⚠️"
+      } else if (s === 429 || s === 529) {
+        result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
       } else if (s === 403) {
-        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403) ⚠️"
+        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403，地区或代理拦截待查) ⚠️"
       } else {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
       }
@@ -328,22 +521,27 @@ function testClaudeAPI() {
 
 function testChatGPT() {
   return (async () => {
-    let region = await getRegion(CHATGPT_TRACE_URL)
-    let f = flag(region)
+    let regionPromise = getRegion(CHATGPT_TRACE_URL)
     try {
-      let resp = await fetchWithRetry({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
+      let resp = await fetchWithTimeout({ url: CHATGPT_WEB_URL, opts: opts_noRedirect, timeout: TIMEOUTS.web, headers: { 'User-Agent': UA } })
+      let f = flag(await regionPromise)
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
       let contentType = getHeader(resp.headers, 'content-type').toLowerCase()
-      if (isBotChallenge(resp, body)) {
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isWebChallenge(resp, body)) {
         result.ChatGPT = "<b>ChatGPT: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
       } else if (s === 451 || hasStructuredRegionBlock(body) ||
           ((s === 403 || contentType.indexOf('text/plain') !== -1) && hasExplicitRegionMessage(body))) {
         result.ChatGPT = "<b>ChatGPT: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403) {
         result.ChatGPT = "<b>ChatGPT: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
-        result.ChatGPT = "<b>ChatGPT: </b>入口可达（未验证账号） " + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (redirect && !isTrustedWebRedirect(resp, ['chatgpt.com', 'openai.com'])) {
+        result.ChatGPT = "<b>ChatGPT: </b>跳转未确认 (" + s + ") ⚠️"
+      } else if (s === 200 || redirect) {
+        result.ChatGPT = "<b>ChatGPT: </b>网页可达 (解锁未证实)" + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (s === 204) {
+        result.ChatGPT = "<b>ChatGPT: </b>页面状态不明 (204) ⚠️"
       } else {
         result.ChatGPT = "<b>ChatGPT: </b>异常 (" + s + ") ❗️"
       }
@@ -357,7 +555,7 @@ function testChatGPT() {
 
 function testOpenAIAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: OPENAI_API_URL,
       opts: opts,
       timeout: TIMEOUTS.api,
@@ -369,13 +567,18 @@ function testOpenAIAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 401/400 only show that the endpoint handled a request; 429 means rate limiting.
-      if (s === 401 || s === 400) {
-        result.OpenAIAPI = "<b>OpenAI API: </b>端点可达（未鉴权） ⚠️"
+      // An arbitrary 401 may come from the proxy gateway. Only an OpenAI
+      // invalid_api_key error is positive evidence of API reachability.
+      if (s === 451) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>地区/法律限制 (451) 🚫"
+      } else if ((s >= 400 && s <= 403) && hasApiRegionBlock(body)) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>地区受限 🚫"
+      } else if (s === 401 && isOpenAIInvalidKeyResponse(body)) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>接口可达 (未认证) ⚠️"
+      } else if (s === 401) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>状态不明 (401，未认证) ⚠️"
       } else if (s === 429) {
-        result.OpenAIAPI = "<b>OpenAI API: </b>已限流（地区未判定） ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.OpenAIAPI = "<b>OpenAI API: </b>受限 🚫"
+        result.OpenAIAPI = "<b>OpenAI API: </b>限流 (未验证) ⚠️"
       } else if (s === 403) {
         result.OpenAIAPI = "<b>OpenAI API: </b>访问受限 (403) ⚠️"
       } else {
@@ -393,7 +596,7 @@ function testOpenAIAPI() {
 
 function testGemini() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: GEMINI_WEB_URL,
       opts: opts_noRedirect,
       timeout: TIMEOUTS.web,
@@ -405,22 +608,21 @@ function testGemini() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      if (s === 302 || s === 301 || s === 307 || s === 308) {
-        // 未登录状态下 Gemini 通常会重定向到 accounts.google.com，属正常
-        let loc = getHeader(resp.headers, 'location').toLowerCase()
-        if (loc.indexOf('accounts.google.com') !== -1 ||
-            loc.indexOf('gemini.google.com') !== -1 ||
-            loc.indexOf('consent.google.com') !== -1) {
-          result.Gemini = "<b>Gemini: </b>入口可达（未验证账号） ⚠️"
-        } else {
-          result.Gemini = "<b>Gemini: </b>重定向异常 ⚠️"
-        }
-      } else if (s === 451 || hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)) {
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isWebChallenge(resp, body)) {
+        result.Gemini = "<b>Gemini: </b>验证拦截 ⚠️"
+      } else if (s === 451 || (s === 403 && (hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)))) {
         result.Gemini = "<b>Gemini: </b>未支持 🚫"
       } else if (s === 403) {
         result.Gemini = "<b>Gemini: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
-        result.Gemini = "<b>Gemini: </b>入口可达（未验证账号） ⚠️"
+      } else if (redirect) {
+        // These login hosts are known, but the response still proves no account entitlement.
+        result.Gemini = isTrustedWebRedirect(resp,
+          ['accounts.google.com', 'gemini.google.com', 'consent.google.com'])
+          ? "<b>Gemini: </b>登录跳转 (解锁未证实) ⚠️"
+          : "<b>Gemini: </b>重定向异常 ⚠️"
+      } else if (s === 200) {
+        result.Gemini = "<b>Gemini: </b>网页可达 (解锁未证实) ⚠️"
       } else {
         result.Gemini = "<b>Gemini: </b>异常 (" + s + ") ❗️"
       }
@@ -436,26 +638,35 @@ function testGemini() {
 
 function testGeminiAPI() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: GEMINI_API_URL,
       opts: opts,
       timeout: TIMEOUTS.api,
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
-      let body = (resp.body || '').toLowerCase()
+      // Keep the original case for structured Google API fields:
+      // INVALID_ARGUMENT and API_KEY_INVALID are case-sensitive.
+      let body = resp.body || ''
 
-      // An intentionally invalid API key never verifies region unlock.
-      if (s === 400 || s === 401) {
-        result.GeminiAPI = "<b>Gemini API: </b>端点可达（未鉴权） ⚠️"
-      } else if (s === 429) {
-        result.GeminiAPI = "<b>Gemini API: </b>已限流（地区未判定） ⚠️"
-      } else if (s === 403 && hasApiRegionBlock(body)) {
-        result.GeminiAPI = "<b>Gemini API: </b>受限 🚫"
+      // A 400 may be FAILED_PRECONDITION (unsupported region) or an
+      // INVALID_ARGUMENT that isn't about the test API key.
+      if (s === 451) {
+        result.GeminiAPI = "<b>Gemini API: </b>地区/法律限制 (451) 🚫"
+      } else if ((s >= 400 && s <= 403) && hasApiRegionBlock(body)) {
+        result.GeminiAPI = "<b>Gemini API: </b>地区受限 🚫"
+      } else if ((s === 400 || s === 401) && isGeminiInvalidKeyResponse(body, s)) {
+        result.GeminiAPI = "<b>Gemini API: </b>接口可达 (无效 Key) ⚠️"
+      } else if (s === 400 || s === 401) {
+        result.GeminiAPI = "<b>Gemini API: </b>状态不明 (" + s + "，未认证) ⚠️"
       } else if (s === 403) {
         result.GeminiAPI = "<b>Gemini API: </b>访问受限 (403) ⚠️"
+      } else if (s === 429) {
+        result.GeminiAPI = "<b>Gemini API: </b>限流 (未验证) ⚠️"
+      } else if (s === 200 && hasGeminiModelsResponse(body)) {
+        result.GeminiAPI = "<b>Gemini API: </b>接口响应成功 (解锁未证实) ⚠️"
       } else if (s === 200) {
-        result.GeminiAPI = "<b>Gemini API: </b>端点响应正常（未验证账号） ⚠️"
+        result.GeminiAPI = "<b>Gemini API: </b>响应格式不明 (200) ⚠️"
       } else {
         result.GeminiAPI = "<b>Gemini API: </b>异常 (" + s + ") ❗️"
       }
@@ -469,8 +680,7 @@ function testGeminiAPI() {
 
 // ===================== 检测: Google 送中 =====================
 // 判断节点出口 IP 是否被 Google 判定为中国大陆网络。
-// Strictly treat only an explicit google.cn/google.com.cn redirect as a
-// *possible* signal. Hong Kong redirects and zh-CN UI are not Mainland proof.
+// 命中特征: 大陆重定向或主页语言锁定 zh-CN；验证码本身不再视为大陆证据。
 
 function testGoogleCN() {
   return (async () => {
@@ -482,10 +692,10 @@ function testGoogleCN() {
     let resp
     try {
       // 主页响应才能提供地区跳转和页面语言；204 只能作为连通性回退。
-      resp = await fetchWithRetry(Object.assign({ url: GOOGLE_URL }, request))
+      resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_URL }, request))
     } catch (firstError) {
       try {
-        resp = await fetchWithRetry(Object.assign({ url: GOOGLE_NOSSL_URL }, request))
+        resp = await fetchWithTimeout(Object.assign({ url: GOOGLE_NOSSL_URL }, request, { timeout: TIMEOUTS.trace }))
         if (resp.statusCode === 204) {
           result.GoogleCN = "<b>Google 送中: </b>无法判定 (仅连通) ⚠️"
           return
@@ -499,21 +709,23 @@ function testGoogleCN() {
     let s = resp.statusCode
     let body = (resp.body || '').toLowerCase()
     let loc = getHeader(resp.headers, 'location').toLowerCase()
-    if (/^https?:\/\/(?:www\.)?google\.(?:cn|com\.cn)(?:[/?#]|$)/.test(loc)) {
-      result.GoogleCN = "<b>Google 送中: </b>疑似大陆跳转（需复核） 🇨🇳⚠️"
-    } else if (/^https?:\/\/(?:www\.)?google\.com\.hk(?:[/?#]|$)/.test(loc) ||
-        loc.indexOf('hkredirect') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>香港跳转（不是大陆证据） ⚠️"
+    const redirectHost = redirectHostname(loc, false)
+    // Location is redirect evidence only for an actual HTTP 3xx response.
+    if (s >= 300 && s < 400 && ['google.cn', 'google.com.cn'].some(domain =>
+        redirectHost === domain || redirectHost.endsWith('.' + domain))) {
+      result.GoogleCN = "<b>Google 送中: </b>可能 (跳转 Google 中国站) 🇨🇳⚠️"
+    } else if (loc.indexOf('hl=zh-cn') !== -1) {
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (语言参数并非地区证据) ⚠️"
     } else if (loc.indexOf('consent.google.') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>无法判定（同意页） ⚠️"
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (同意页) ⚠️"
     } else if (loc.indexOf('/sorry/') !== -1 || body.indexOf('/sorry/') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>无法判定（人机验证） ⚠️"
-    } else if (/<html[^>]+lang=["']zh-cn["']/.test(body) || loc.indexOf('hl=zh-cn') !== -1) {
-      result.GoogleCN = "<b>Google 送中: </b>简体语言偏好（非地区证据） ⚠️"
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (触发人机验证) ⚠️"
+    } else if (/<html[^>]+lang=["']zh-cn["']/.test(body)) {
+      result.GoogleCN = "<b>Google 送中: </b>无法判定 (简体页面并非地区证据) ⚠️"
     } else if (s >= 300 && s < 400) {
       result.GoogleCN = "<b>Google 送中: </b>重定向异常 ⚠️"
     } else if (s === 204 || (s >= 200 && s < 300)) {
-      result.GoogleCN = "<b>Google 送中: </b>未见大陆跳转迹象（非保证） ✅"
+      result.GoogleCN = "<b>Google 送中: </b>未观察到大陆跳转 (非确定证明) ⚠️"
     } else {
       result.GoogleCN = "<b>Google 送中: </b>异常 (" + s + ") ❗️"
     }
@@ -524,7 +736,7 @@ function testGoogleCN() {
 
 function testNetflix() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: NETFLIX_URL,
       opts: opts,
       timeout: TIMEOUTS.streaming,
@@ -532,11 +744,11 @@ function testNetflix() {
     }).then(resp => {
       let s = resp.statusCode
       if (s === 404) {
-        result.Netflix = "<b>Netflix: </b>仅自制剧 ⚠️"
+        result.Netflix = "<b>Netflix: </b>样本不可用 (不能推断仅自制剧) ⚠️"
       } else if (s === 403 && isBotChallenge(resp, resp.body)) {
         result.Netflix = "<b>Netflix: </b>验证拦截 ⚠️"
       } else if (s === 403) {
-        result.Netflix = "<b>Netflix: </b>访问受限（可能地区或风控） ⚠️"
+        result.Netflix = "<b>Netflix: </b>访问受限 (403) ⚠️"
       } else if (s === 200) {
         let url = getHeader(resp.headers, 'x-originating-url')
         let region = ''
@@ -546,7 +758,7 @@ function testNetflix() {
             region = parts[3].split('-')[0].toUpperCase()
           }
         }
-        result.Netflix = "<b>Netflix: </b>片源页可达（未验证播放）" + arrow + "⟦" + flag(region) + "⟧ ⚠️"
+        result.Netflix = "<b>Netflix: </b>样本页可达 (完整解锁未证实)" + arrow + "⟦" + flag(region) + "⟧ ⚠️"
       } else {
         result.Netflix = "<b>Netflix: </b>异常 (" + s + ") ❗️"
       }
@@ -562,7 +774,7 @@ function testNetflix() {
 
 function testYouTube() {
   return new Promise((resolve) => {
-    fetchWithRetry({
+    fetchWithTimeout({
       url: YOUTUBE_URL,
       opts: opts,
       timeout: TIMEOUTS.streaming,
@@ -571,17 +783,13 @@ function testYouTube() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      if (s < 200 || s >= 400) {
+      // 451 必须先于通用 HTTP 错误处理，否则地区限制分支永远无法命中。
+      if (s === 451) {
+        result.YouTube = "<b>YouTube Premium: </b>地区/法律限制 (451) 🚫"
+      } else if (s < 200 || s >= 400) {
         result.YouTube = "<b>YouTube Premium: </b>异常 (" + s + ") ❗️"
-        resolve()
-        return
-      }
-
-      if (body.indexOf('premium is not available in your country') !== -1 ||
-          body.indexOf('youtube premium is not available') !== -1 ||
-          body.indexOf('not available in your region') !== -1) {
-        result.YouTube = "<b>YouTube Premium: </b>未支持 🚫"
       } else {
+        // 页面 JS 可能包含限制文案，不能在整页 HTML 中用字符串匹配判定地区封锁。
         let region = ''
         let re = /"(?:gl|innertube_context_gl)":"([a-z]{2})"/
         let ret = re.exec(body)
@@ -590,7 +798,7 @@ function testYouTube() {
         } else if (body.indexOf('www.google.cn') !== -1 || body.indexOf('youtube.cn') !== -1) {
           region = 'CN'
         }
-        result.YouTube = "<b>YouTube Premium: </b>页面可达（未验证订阅）" + arrow + "⟦" + flag(region) + "⟧ ⚠️"
+        result.YouTube = "<b>YouTube Premium: </b>页面可达 (订阅资格未证实)" + arrow + "⟦" + flag(region) + "⟧ ⚠️"
       }
       resolve()
     }, err => {
@@ -601,125 +809,63 @@ function testYouTube() {
 }
 
 // ===================== 检测: Disney+ =====================
-
+// The legacy device-registration GraphQL client token cannot reliably prove
+// playback eligibility. Probe the anonymous homepage and describe only the
+// response actually observed; no cookies or account credentials are sent.
 function testDisneyPlus() {
-  return new Promise((resolve) => {
-    fetchWithRetry({
-      url: DISNEY_API_URL,
-      method: 'POST',
-      opts: opts,
-      timeout: TIMEOUTS.streaming,
-      headers: {
-        'Accept-Language': 'en',
-        'Authorization': DISNEY_TOKEN,
-        'Content-Type': 'application/json',
-        'User-Agent': UA
-      },
-      body: JSON.stringify({
-        query: 'mutation registerDevice($input: RegisterDeviceInput!) { registerDevice(registerDevice: $input) { grant { grantType assertion } } }',
-        variables: {
-          input: {
-            applicationRuntime: 'chrome',
-            attributes: {
-              browserName: 'chrome',
-              browserVersion: '126.0.0',
-              manufacturer: 'apple',
-              model: null,
-              operatingSystem: 'macintosh',
-              operatingSystemVersion: '10.15.7',
-              osDeviceIds: []
-            },
-            deviceFamily: 'browser',
-            deviceLanguage: 'en',
-            deviceProfile: 'macosx'
-          }
-        }
-      })
-    }).then(resp => {
-      let body = (resp.body || '').toLowerCase()
-      if (resp.statusCode === 401) {
-        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403 && hasApiRegionBlock(body)) {
-        result.Disney = "<b>Disneyᐩ: </b>未支持 🚫"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403 && /token|unauthorized|invalid credential/.test(body)) {
-        result.Disney = "<b>Disneyᐩ: </b>Token 失效，需更新 ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode === 403) {
-        result.Disney = "<b>Disneyᐩ: </b>访问受限 (403) ⚠️"
-        resolve()
-        return
-      }
-      if (resp.statusCode !== 200) {
-        result.Disney = "<b>Disneyᐩ: </b>请求异常 (" + resp.statusCode + ") ⚠️"
-        resolve()
-        return
-      }
-
-      try {
-        let data = JSON.parse(resp.body)
-        let sdk = data && data.extensions && data.extensions.sdk
-        if (!sdk) {
-          result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-          resolve()
-          return
-        }
-
-        let session = sdk.session || {}
-        let inSupported = session.inSupportedLocation
-        let region = (session.location && session.location.countryCode) || ''
-        let f = flag(region)
-
-        if (inSupported === false || inSupported === 'false') {
-          result.Disney = "<b>Disneyᐩ: </b>即将登陆" + arrow + "⟦" + f + "⟧ ⚠️"
-        } else if (inSupported === true || inSupported === 'true') {
-          result.Disney = "<b>Disneyᐩ: </b>支持 " + arrow + "⟦" + f + "⟧ 🎉"
-        } else {
-          result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-        }
-      } catch (e) {
-        result.Disney = "<b>Disneyᐩ: </b>检测异常 ❗️"
-      }
-      resolve()
-    }, err => {
-      result.Disney = "<b>Disneyᐩ: </b>" + networkErrorLabel(err)
-      resolve()
-    })
+  return fetchWithTimeout({
+    url: DISNEY_WEB_URL,
+    opts: opts_noRedirect,
+    timeout: TIMEOUTS.streaming,
+    headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
+  }).then(resp => {
+    const status = resp.statusCode
+    const body = (resp.body || '').toLowerCase()
+    if (status === 451 || (status === 403 && hasApiRegionBlock(body))) {
+      result.Disney = "<b>Disneyᐩ: </b>地区/访问限制 (" + status + ") 🚫"
+    } else if (isBotChallenge(resp, body)) {
+      result.Disney = "<b>Disneyᐩ: </b>验证拦截 ⚠️"
+    } else if (status === 403) {
+      result.Disney = "<b>Disneyᐩ: </b>访问受限 (403，原因未明) ⚠️"
+    } else if (status === 429) {
+      result.Disney = "<b>Disneyᐩ: </b>请求限流 (429) ⚠️"
+    } else if (status >= 200 && status < 300) {
+      result.Disney = "<b>Disneyᐩ: </b>网页可达 (播放未验证) ⚠️"
+    } else if (status >= 300 && status < 400) {
+      result.Disney = "<b>Disneyᐩ: </b>网页重定向 (播放未验证) ⚠️"
+    } else {
+      result.Disney = "<b>Disneyᐩ: </b>网页异常 (" + status + ") ⚠️"
+    }
+  }, err => {
+    result.Disney = "<b>Disneyᐩ: </b>" + networkErrorLabel(err)
   })
 }
 
 // ===================== 输出构建 =====================
 
 function buildOutput(policyInfo) {
-  let nodeLabel = escapeHtml(policyInfo || $environment.params)
+  let nodeLabel = escapeHtml(policyInfo || SELECTED_POLICY || '当前分流（未指定策略）')
 
   // AI 服务板块
   let aiItems  = [
     result.Claude, result.ClaudeAPI,
     result.ChatGPT, result.OpenAIAPI,
     result.Gemini, result.GeminiAPI
-  ].join('</br></br>')
+  ].join('<br/><br/>')
   // 流媒体板块
-  let mediaItems = [result.Netflix, result.YouTube, result.Disney].join('</br></br>')
+  let mediaItems = [result.Netflix, result.YouTube, result.Disney].join('<br/><br/>')
 
   let content = ''
-  content += '--------------------------------------</br>'
-  content += '<font color=#6C5CE7><b>🤖 AI 服务</b></font></br></br>'
+  content += '--------------------------------------<br/>'
+  content += '<font color=#6C5CE7><b>🤖 AI 服务</b></font><br/><br/>'
   content += aiItems
-  content += '</br></br>--------------------------------------</br>'
-  content += '<font color=#00A86B><b>🌐 Google 网络</b></font></br></br>'
+  content += '<br/><br/>--------------------------------------<br/>'
+  content += '<font color=#00A86B><b>🌐 Google 网络</b></font><br/><br/>'
   content += result.GoogleCN
-  content += '</br></br>--------------------------------------</br>'
-  content += '<font color=#0984E3><b>📺 流媒体</b></font></br></br>'
+  content += '<br/><br/>--------------------------------------<br/>'
+  content += '<font color=#0984E3><b>📺 流媒体</b></font><br/><br/>'
   content += mediaItems
-  content += '</br></br>--------------------------------------</br>'
+  content += '<br/><br/>--------------------------------------<br/>'
   content += '<font color=#CD5C5C><b>节点</b>' + arrow + nodeLabel + '</font>'
 
   return '<p style="text-align: center; font-family: -apple-system; font-size: large; font-weight: thin">' + content + '</p>'
@@ -727,53 +873,120 @@ function buildOutput(policyInfo) {
 
 // ===================== 主流程 =====================
 
-const message = {
-  action: "get_policy_state",
-  content: $environment.params
+// 所有输出路径共用一个出口，保证最多一次 $done()。
+// 超过全局预算时将未完成项目明确标注，不能把它们误报成「不支持」。
+let reportDone = false
+let reportTimer = null
+let resolvedPolicyPath = ''
+
+function finishReport(deadlineReached) {
+  if (reportDone) return
+  reportDone = true
+  if (reportTimer != null) clearTimeout(reportTimer)
+
+  if (deadlineReached) {
+    for (const key of ['Claude', 'ClaudeAPI', 'ChatGPT', 'OpenAIAPI',
+                       'Gemini', 'GeminiAPI', 'GoogleCN', 'Netflix', 'YouTube', 'Disney']) {
+      result[key] = result[key].replace('检测失败 ❗️', '未完成（总时限）⚠️')
+    }
+  }
+
+  let output
+  try {
+    output = {
+      title: deadlineReached ? '🔍 服务解锁查询（部分结果）' : result.title,
+      htmlMessage: buildOutput(resolvedPolicyPath)
+    }
+  } catch (error) {
+    output = {
+      title: '🔍 服务解锁查询',
+      htmlMessage: '<p>报告生成异常：' + escapeHtml(error) + '</p>'
+    }
+  }
+  $done(output)
+}
+
+// 策略链路是辅助信息，绝对不能阻塞主体诊断结果。
+// 对不提供 $configuration API 的 QX 环境、空策略参数和永久 pending 都安全降级。
+function queryPolicyPath() {
+  return new Promise(resolve => {
+    if (!SELECTED_POLICY || typeof $configuration === 'undefined' ||
+        !$configuration || typeof $configuration.sendMessage !== 'function') {
+      resolve()
+      return
+    }
+
+    let settled = false
+    const timer = setTimeout(() => complete(null), POLICY_LOOKUP_TIMEOUT_MS)
+    function complete(response) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        if (response && response.ret) {
+          let path = response.ret[SELECTED_POLICY]
+          if (Array.isArray(path)) resolvedPolicyPath = path.join(arrow)
+          else if (typeof path === 'string') resolvedPolicyPath = path
+        }
+      } catch (error) {
+        console.log('>>> 策略链路解析失败: ' + error)
+      }
+      resolve()
+    }
+
+    try {
+      Promise.resolve($configuration.sendMessage({
+        action: 'get_policy_state',
+        content: SELECTED_POLICY
+      })).then(complete, () => complete(null))
+    } catch (error) {
+      complete(null)
+    }
+  })
 }
 
 ;(async () => {
-  console.log(">>> 脚本启动, 策略组: " + $environment.params)
-
-  // 并发执行所有检测
-  await Promise.all([
-    testClaude(),
-    testClaudeAPI(),
-    testChatGPT(),
-    testOpenAIAPI(),
-    testGemini(),
-    testGeminiAPI(),
-    testGoogleCN(),
-    testNetflix(),
-    testYouTube(),
-    testDisneyPlus()
-  ])
-
-  console.log(">>> 全部检测完成")
-  console.log(">>> Claude: " + result.Claude)
-  console.log(">>> ChatGPT: " + result.ChatGPT)
-  console.log(">>> Gemini: " + result.Gemini)
-  console.log(">>> Google送中: " + result.GoogleCN)
-
-  // 获取策略组链路信息
-  try {
-    let resolve = await $configuration.sendMessage(message)
-    if (resolve.ret) {
-      let path = resolve.ret[message.content]
-      let output = Array.isArray(path) ? path.join(arrow) : (path || $environment.params)
-      $done({ title: result.title, htmlMessage: buildOutput(output) })
-    } else {
-      $done({ title: result.title, htmlMessage: buildOutput(null) })
-    }
-  } catch (e) {
-    console.log(">>> sendMessage 异常: " + e)
-    $done({ title: result.title, htmlMessage: buildOutput(null) })
+  if (SCRIPT_MODE === 'selftest') {
+    // If no panel appears, investigate the QX task cache/Tunnel/runtime first.
+    reportDone = true
+    $done({
+      title: '🔍 服务解锁查询 · 引擎自检',
+      htmlMessage: '<p style="text-align:center"><b>✅ QX 脚本引擎执行成功</b><br/>' +
+        '未发起网络请求，也未判断任何服务是否解锁。<br/>' +
+        '当前策略标签：' + escapeHtml(SELECTED_POLICY || '未传入') + '</p>'
+    })
+    return
   }
-})().catch(e => {
-  // 全局兜底：无论什么错误都保证 $done 被调用
-  console.log(">>> 脚本全局异常: " + e)
-  $done({
-    title: '🔍 服务解锁查询',
-    htmlMessage: '<p style="text-align:center">脚本执行出错: ' + escapeHtml(e) + '</p>'
-  })
+
+  // 从第一行开始计时：任何网络或 API 卡住均不得让 UI 一直空白。
+  reportTimer = setTimeout(() => finishReport(true), SCRIPT_DEADLINE_MS)
+  console.log('>>> 服务解锁检测启动 (总时限 ' + SCRIPT_DEADLINE_MS + 'ms)')
+
+  let policyTask = queryPolicyPath()
+  const probes = [
+    ['Claude', testClaude],
+    ['ClaudeAPI', testClaudeAPI],
+    ['ChatGPT', testChatGPT],
+    ['OpenAIAPI', testOpenAIAPI],
+    ['Gemini', testGemini],
+    ['GeminiAPI', testGeminiAPI],
+    ['GoogleCN', testGoogleCN],
+    ['Netflix', testNetflix],
+    ['YouTube', testYouTube],
+    ['Disney', testDisneyPlus]
+  ]
+
+  await Promise.all(probes.map(([name, probe]) =>
+    Promise.resolve().then(probe).catch(error => {
+      console.log('>>> 检测项 ' + name + ' 异常: ' + error)
+      result[name] = result[name].replace('检测失败 ❗️', '检测异常 ⚠️')
+    })
+  ))
+  await policyTask
+
+  console.log('>>> 服务解锁检测完成')
+  finishReport(false)
+})().catch(error => {
+  console.log('>>> 脚本全局异常: ' + error)
+  finishReport(true)
 })

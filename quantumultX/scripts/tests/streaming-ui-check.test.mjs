@@ -1,0 +1,676 @@
+// node --test quantumultX/scripts/tests/streaming-ui-check.test.mjs
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
+
+const source = readFileSync(new URL('../streaming-ui-check.js', import.meta.url), 'utf8')
+
+async function probe(overrides = {}) {
+  let report
+  const defaults = {
+    'api.anthropic.com': { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}' },
+    'api.openai.com': { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' },
+    'generativelanguage.googleapis.com': { statusCode: 400, body: "{\"error\":{\"code\":400,\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"API_KEY_INVALID\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"}}]}}" },
+    'www.netflix.com': { statusCode: 404, body: '' },
+    'www.youtube.com': { statusCode: 200, body: '<html><title>Premium</title></html>' },
+    'www.disneyplus.com': { statusCode: 200, body: '<html><title>Disney+</title></html>' },
+    'www.google.com': { statusCode: 302, headers: { location: 'https://www.google.com.hk/' }, body: '' },
+    'ipapi.co': { statusCode: 200, body: '{"country_code":"US"}' }
+  }
+  const responses = { ...defaults, ...overrides }
+  const context = {
+    $environment: { params: 'TEST-POLICY' },
+    $task: { fetch: async ({ url }) => {
+      const host = new URL(url).hostname
+      return responses[host] || { statusCode: 200, headers: {}, body: 'loc=US' }
+    } },
+    $configuration: { sendMessage: async () => ({ ret: { 'TEST-POLICY': ['TEST-POLICY'] } }) },
+    $done: value => { report = value },
+    console: { log() {} },
+    setTimeout, clearTimeout, URL
+  }
+  runInNewContext(source, context, { timeout: 2000 })
+  for (let i = 0; i < 50 && !report; i++) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.ok(report, 'script must always call $done')
+  return report.htmlMessage
+}
+
+test('Gemini FAILED_PRECONDITION at HTTP 400 is region blocked', async () => {
+  const out = await probe({
+    'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported for the API use."}}' }
+  })
+  assert.ok(out.includes('Gemini API: </b>地区受限'))
+})
+
+test('invalid API keys are reachable, not verified as usable', async () => {
+  const out = await probe()
+  assert.ok(out.includes('OpenAI API: </b>接口可达'))
+  assert.ok(out.includes('Claude API: </b>接口可达'))
+  assert.ok(out.includes('Gemini API: </b>接口可达'))
+})
+
+test('HTTP 200 landing pages do not prove full unlock', async () => {
+  const out = await probe({ 'www.netflix.com': { statusCode: 200, body: '<html></html>' } })
+  assert.ok(out.includes('Netflix: </b>样本页可达'))
+  assert.ok(out.includes('YouTube Premium: </b>页面可达'))
+  assert.ok(out.includes('ChatGPT: </b>网页可达'))
+})
+
+test('Hong Kong Google redirect is not mainland evidence', async () => {
+  const out = await probe()
+  assert.ok(!out.includes('Google 送中: </b>是 (大陆重定向)'))
+})
+
+test('Disney homepage 500 is not a region block', async () => {
+  const out = await probe({ 'www.disneyplus.com': { statusCode: 500, body: '' } })
+  assert.ok(out.includes('Disneyᐩ: </b>网页异常 (500)'))
+})
+
+test('YouTube HTTP 451 reports a legal or regional block', async () => {
+  const out = await probe({
+    'www.youtube.com': { statusCode: 451, body: '' }
+  })
+  assert.ok(out.includes('YouTube Premium: </b>地区/法律限制 (451)'))
+})
+
+test('Google language preference is not mainland proof', async () => {
+  const out = await probe({
+    'www.google.com': { statusCode: 302, headers: { location: 'https://www.google.com/?hl=zh-cn' }, body: '' }
+  })
+  assert.ok(out.includes('Google 送中: </b>无法判定 (语言参数并非地区证据)'))
+})
+
+
+// Runtime failure fixtures: unlike the successful HTTP mocks above, these
+// simulate real QX tasks that remain pending, reject or throw synchronously.
+async function probeRuntime(options = {}) {
+  const reports = []
+  const requests = []
+  const policy = options.policy === undefined ? 'TEST-POLICY' : options.policy
+  const environment = policy === null ? {} : { params: policy }
+  const responseOf = options.responseOf || (() => ({ statusCode: 200, headers: {}, body: 'loc=US' }))
+  const timerScale = options.timerScale || (ms => ms)
+  const context = {
+    $environment: environment,
+    $task: {
+      fetch(req) {
+        requests.push(req)
+        const response = responseOf(req)  // may synchronously throw
+        return response && typeof response.then === 'function'
+          ? response
+          : Promise.resolve(response)
+      }
+    },
+    $configuration: options.configuration === undefined
+      ? { sendMessage: async () => ({ ret: { 'TEST-POLICY': ['TEST-POLICY'] } }) }
+      : options.configuration,
+    $done: value => reports.push(value),
+    console: { log() {} },
+    setTimeout: (fn, ms) => setTimeout(fn, timerScale(ms)),
+    clearTimeout,
+    URL
+  }
+  runInNewContext(source, context, { timeout: 2000 })
+  for (let i = 0; i < 120 && reports.length === 0; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  assert.equal(reports.length, 1, 'QX must receive one completed UI response')
+  return { reports, requests }
+}
+
+test('a completely stalled node still returns a partial report by deadline', async () => {
+  const { reports, requests } = await probeRuntime({
+    responseOf: () => new Promise(() => {}),
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 8500 ? 25 : 90
+  })
+  const report = reports[0]
+  assert.match(report.title, /部分结果/)
+  assert.ok(report.htmlMessage.includes('OpenAI API: </b>未完成（总时限）'))
+  assert.ok(report.htmlMessage.includes('Netflix: </b>未完成（总时限）'))
+  assert.ok(!report.htmlMessage.includes('完整支持'))
+  assert.ok(requests.length >= 10)
+  await new Promise(resolve => setTimeout(resolve, 115))
+  assert.equal(reports.length, 1, '$done must not run twice on late request timeout')
+})
+
+test('partial success is retained when other services are stalled', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('api.openai.com')
+      ? { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' }
+      : new Promise(() => {}),
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 8500 ? 25 : 85
+  })
+  const output = reports[0].htmlMessage
+  assert.ok(output.includes('OpenAI API: </b>接口可达 (未认证)'))
+  assert.ok(output.includes('YouTube Premium: </b>未完成（总时限）'))
+})
+
+test('policy-state API hang cannot prevent complete service report', async () => {
+  const { reports } = await probeRuntime({
+    configuration: { sendMessage: () => new Promise(() => {}) },
+    timerScale: ms => ms === 750 ? 20 : ms === 8500 ? 120 : 90
+  })
+  const report = reports[0]
+  assert.ok(!report.title.includes('部分结果'))
+  assert.ok(report.htmlMessage.includes('Claude API: </b>异常 (200)'))
+  assert.ok(report.htmlMessage.includes('节点</b> ➟ TEST-POLICY'))
+})
+
+test('undefined policy parameters fall back to default routing without throwing', async () => {
+  const { reports, requests } = await probeRuntime({
+    policy: null,
+    configuration: undefined
+  })
+  assert.ok(reports[0].htmlMessage.includes('当前分流（未指定策略）'))
+  assert.ok(requests.length >= 10)
+  for (const req of requests) {
+    assert.ok(!Object.hasOwn(req.opts || {}, 'policy'), 'must not send undefined policy')
+    assert.ok(!Object.hasOwn(req, 'timeout'), 'script timeout is not a documented QX fetch parameter')
+  }
+})
+
+test('synchronous $task.fetch failures show service error without blank UI', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => {
+      if (req.url.includes('api.anthropic.com')) throw new Error('invalid proxy policy')
+      return { statusCode: 200, headers: {}, body: 'loc=US' }
+    }
+  })
+  assert.ok(reports[0].htmlMessage.includes('Claude API: </b>网络错误'))
+  assert.ok(reports[0].htmlMessage.includes('OpenAI API: </b>异常 (200)'))
+})
+
+test('a late HTTP response cannot cause a second $done after watchdog', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('www.netflix.com')
+      ? new Promise(resolve => setTimeout(() => resolve({ statusCode: 200, body: '' }), 55))
+      : new Promise(() => {}),
+    timerScale: ms => ms === 8500 ? 25 : 100,
+    configuration: { sendMessage: () => new Promise(() => {}) }
+  })
+  assert.ok(reports[0].htmlMessage.includes('Netflix: </b>未完成（总时限）'))
+  await new Promise(resolve => setTimeout(resolve, 110))
+  assert.equal(reports.length, 1)
+})
+
+
+test('Disney homepage success and redirects never claim playback eligibility', async () => {
+  const ordinary = await probe()
+  assert.ok(ordinary.includes('Disneyᐩ: </b>网页可达 (播放未验证)'))
+  const redirected = await probe({
+    'www.disneyplus.com': {
+      statusCode: 302, headers: { location: 'https://www.disneyplus.com/login' }, body: ''
+    }
+  })
+  assert.ok(redirected.includes('Disneyᐩ: </b>网页重定向 (播放未验证)'))
+})
+
+test('Disney 403 without explicit region evidence stays indeterminate', async () => {
+  const unknown = await probe({
+    'www.disneyplus.com': { statusCode: 403, body: 'Access Denied' }
+  })
+  assert.ok(unknown.includes('访问受限 (403，原因未明)'))
+  const blocked = await probe({
+    'www.disneyplus.com': {
+      statusCode: 403,
+      body: '{"error":{"status":"FAILED_PRECONDITION","message":"User location is not supported"}}'
+    }
+  })
+  assert.ok(blocked.includes('Disneyᐩ: </b>地区/访问限制 (403)'))
+})
+
+test('Google HTTP 200 is not proof of a non-mainland route', async () => {
+  const out = await probe({
+    'www.google.com': { statusCode: 200, body: '<html lang="en"></html>' }
+  })
+  assert.ok(out.includes('Google 送中: </b>未观察到大陆跳转 (非确定证明)'))
+})
+
+test('shared region fallback makes only one IP API request for two failed traces', async () => {
+  const { reports, requests } = await probeRuntime({
+    responseOf: req => {
+      if (req.url.includes('/cdn-cgi/trace')) return { statusCode: 403, body: '' }
+      if (req.url.includes('ipapi.co/json')) {
+        return { statusCode: 200, body: '{"country_code":"JP"}' }
+      }
+      return { statusCode: 200, headers: {}, body: '' }
+    }
+  })
+  assert.equal(requests.filter(req => req.url.includes('ipapi.co/json')).length, 1)
+  assert.ok(reports[0].htmlMessage.includes('⟦🇯🇵⟧'))
+})
+
+test('malformed HTTP response does not strand API probe or the report', async () => {
+  const { reports } = await probeRuntime({
+    responseOf: req => req.url.includes('api.openai.com')
+      ? null
+      : { statusCode: 200, body: 'loc=US', headers: {} }
+  })
+  assert.ok(reports[0].htmlMessage.includes('OpenAI API: </b>响应格式异常'))
+  assert.ok(!reports[0].title.includes('部分结果'))
+})
+
+test('QX selftest via variables runs without network or policy APIs', async () => {
+  const reports = []
+  let calls = 0
+  runInNewContext(source, {
+    $environment: { params: '<EXAMPLE & NODE>', variables: { mode: 'selftest' } },
+    $task: { fetch: () => { calls++; throw new Error('network must not be used') } },
+    $configuration: { sendMessage: () => { calls++; throw new Error('policy API must not be used') } },
+    $done: value => reports.push(value),
+    console: { log() {} }, setTimeout, clearTimeout
+  })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(reports.length, 1)
+  assert.equal(calls, 0)
+  assert.ok(reports[0].title.includes('引擎自检'))
+  assert.ok(reports[0].htmlMessage.includes('未发起网络请求'))
+  assert.ok(reports[0].htmlMessage.includes('&lt;EXAMPLE &amp; NODE&gt;'))
+})
+
+test('QX selftest works with legacy sourcePath #mode=selftest', async () => {
+  const reports = []
+  let calls = 0
+  runInNewContext(source, {
+    $environment: { params: 'NODE', sourcePath: 'https://example.test/script.js#mode=selftest' },
+    $task: { fetch: () => { calls++; throw new Error('network must not be used') } },
+    $done: value => reports.push(value),
+    console: { log() {} }, setTimeout, clearTimeout
+  })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(reports.length, 1)
+  assert.equal(calls, 0)
+  assert.ok(reports[0].htmlMessage.includes('脚本引擎执行成功'))
+})
+
+test('challenge strings on HTTP 200 pages are not proof of bot mitigation', async () => {
+  const out = await probe({
+    'www.disneyplus.com': {
+      statusCode: 200,
+      body: '<html><script>window.cf_chl = "cf-chl-";</script></html>'
+    },
+    'claude.ai': {
+      statusCode: 200,
+      body: '<html><script>const word = "challenge-platform"</script></html>'
+    },
+    'chatgpt.com': {
+      statusCode: 200,
+      body: '<html><script>const word = "checking your browser"</script></html>'
+    }
+  })
+  assert.ok(out.includes('Disneyᐩ: </b>网页可达 (播放未验证)'))
+  assert.ok(out.includes('Claude: </b>网页可达 (解锁未证实)'))
+  assert.ok(out.includes('ChatGPT: </b>网页可达 (解锁未证实)'))
+  const blocked = await probe({
+    'www.disneyplus.com': {
+      statusCode: 403,
+      headers: { 'cf-mitigated': 'challenge' },
+      body: '<html>Checking your browser</html>'
+    }
+  })
+  assert.ok(blocked.includes('Disneyᐩ: </b>验证拦截'))
+})
+
+test('Claude API generic 400/401 are unknown, not reachable', async () => {
+  for (const status of [400, 401]) {
+    const out = await probe({
+      'api.anthropic.com': { statusCode: status, body: '<html>Proxy Error</html>' }
+    })
+    assert.ok(out.includes('Claude API: </b>状态不明 (' + status), 'HTTP ' + status)
+    assert.ok(!out.includes('Claude API: </b>接口可达'), 'false positive: ' + status)
+  }
+})
+
+test('Claude API structured validation or authentication errors mean reachability only', async () => {
+  const invalidRequest = await probe({
+    'api.anthropic.com': {
+      statusCode: 400,
+      body: '{"type":"error","error":{"type":"invalid_request_error","message":"invalid request"}}'
+    }
+  })
+  assert.ok(invalidRequest.includes('Claude API: </b>接口可达 (未认证)'))
+  const auth = await probe({
+    'api.anthropic.com': {
+      statusCode: 401,
+      body: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'
+    }
+  })
+  assert.ok(auth.includes('Claude API: </b>接口可达 (未认证)'))
+})
+
+test('Claude API region restriction overrides 400/401; 451 needs no body', async () => {
+  for (const status of [400, 401, 451]) {
+    const out = await probe({
+      'api.anthropic.com': {
+        statusCode: status,
+        body: status === 451 ? '' : '{"error":{"message":"User location is not supported"}}'
+      }
+    })
+    assert.ok(out.includes('Claude API: </b>地区受限'), 'HTTP ' + status)
+  }
+})
+
+test('Claude API 429/529 remain inconclusive', async () => {
+  for (const status of [429, 529]) {
+    const out = await probe({ 'api.anthropic.com': { statusCode: status, body: '{}' } })
+    assert.ok(out.includes('Claude API: </b>限流/繁忙 (未验证)'), String(status))
+    assert.ok(!out.includes('Claude API: </b>接口可达'), String(status))
+  }
+})
+test('Claude API rejects bare or incomplete authentication JSON envelopes', async () => {
+  for (const status of [400, 401]) {
+    for (const body of [
+      '{"type":"authentication_error"}',
+      '{"error":{"type":"authentication_error"}}',
+      '{"type":"proxy_error","error":{"type":"authentication_error"}}',
+      '{"type":"error","error":"authentication_error"}'
+    ]) {
+      const out = await probe({ 'api.anthropic.com': { statusCode: status, body } })
+      assert.ok(out.includes('Claude API: </b>状态不明 (' + status), body)
+      assert.ok(!out.includes('Claude API: </b>接口可达'), body)
+    }
+  }
+})
+
+test('Claude Web unknown redirect is not reported as a reachable page', async () => {
+  const unknown = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://portal.example/login' }, body: '' }
+  })
+  assert.ok(unknown.includes('Claude: </b>跳转未确认 (302)'), unknown)
+  assert.ok(!unknown.includes('Claude: </b>网页可达'), unknown)
+  const expected = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: 'https://claude.ai/login' }, body: '' }
+  })
+  assert.ok(expected.includes('Claude: </b>网页可达 (解锁未证实)'))
+  const challenge = await probe({
+    'claude.ai': { statusCode: 302, headers: { Location: '/cdn-cgi/challenge-platform/start' }, body: '' }
+  })
+  assert.ok(challenge.includes('Claude: </b>跳转未确认 (302)'), challenge)
+})
+
+test('Claude HTTP 200 challenge title is not a normal page', async () => {
+  const out = await probe({
+    'claude.ai': { statusCode: 200, body: '<html><title>Just a moment...</title></html>' }
+  })
+  assert.ok(out.includes('Claude: </b>验证拦截'), out)
+  assert.ok(!out.includes('Claude: </b>网页可达'), out)
+})
+
+test('Claude Web probe must disable automatic HTTP redirects', async () => {
+  const { requests } = await probeRuntime()
+  const claudeWeb = requests.find(req => req.url === 'https://claude.ai')
+  assert.ok(claudeWeb)
+  assert.equal(claudeWeb.opts.redirection, false)
+})
+
+test('OpenAI API generic 401 or gateway JSON is inconclusive', async () => {
+  for (const body of [
+    '<html><title>Proxy denied</title></html>',
+    '{"error":"authentication_failed"}',
+    '{"error":{"code":"unauthorized","type":"gateway_error"}}',
+    '{"error":{"message":"Invalid credentials"}}'
+  ]) {
+    const out = await probe({ 'api.openai.com': { statusCode: 401, body } })
+    assert.ok(out.includes('OpenAI API: </b>状态不明 (401'), body)
+    assert.ok(!out.includes('OpenAI API: </b>接口可达'), body)
+  }
+})
+
+test('OpenAI API structured invalid_api_key means reachability, not account access', async () => {
+  const out = await probe({
+    'api.openai.com': { statusCode: 401,
+      body: '{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}' }
+  })
+  assert.ok(out.includes('OpenAI API: </b>接口可达 (未认证)'))
+})
+
+test('OpenAI API explicit region error is not hidden by a 401; 451 is reported', async () => {
+  const denied = await probe({
+    'api.openai.com': { statusCode: 401,
+      body: '{"error":{"message":"Country not supported","type":"invalid_request_error","code":"invalid_api_key"}}' }
+  })
+  assert.ok(denied.includes('OpenAI API: </b>地区受限'), denied)
+  const legal = await probe({ 'api.openai.com': { statusCode: 451, body: '' } })
+  assert.ok(legal.includes('OpenAI API: </b>地区/法律限制 (451)'), legal)
+})
+
+test('Gemini API generic 400/401 or malformed JSON is inconclusive', async () => {
+  for (const statusCode of [400, 401]) {
+    for (const body of [
+      '<html>upstream gateway error</html>',
+      '{"error":"bad request"}',
+      '{"error":{"status":"INVALID_ARGUMENT","message":"missing parameter"}}',
+      '{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID","domain":"evil.example"}]}}'
+    ]) {
+      const out = await probe({
+        'generativelanguage.googleapis.com': { statusCode, body }
+      })
+      assert.ok(out.includes('Gemini API: </b>状态不明 (' + statusCode), body)
+      assert.ok(!out.includes('Gemini API: </b>接口可达'), body)
+    }
+  }
+})
+
+test('Gemini API official API_KEY_INVALID response is reachability only', async () => {
+  const out = await probe({
+    'generativelanguage.googleapis.com': {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: {
+          code: 400, status: 'INVALID_ARGUMENT',
+          message: 'API key not valid. Please pass a valid API key.',
+          details: [{
+            '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+            reason: 'API_KEY_INVALID', domain: 'googleapis.com',
+            metadata: { service: 'generativelanguage.googleapis.com' }
+          }]
+        }
+      })
+    }
+  })
+  assert.ok(out.includes('Gemini API: </b>接口可达 (无效 Key)'), out)
+})
+
+test('Gemini API HTTP 451 is a legal/region block even without body', async () => {
+  const out = await probe({ 'generativelanguage.googleapis.com': { statusCode: 451, body: '' } })
+  assert.ok(out.includes('Gemini API: </b>地区/法律限制 (451)'), out)
+})
+
+test('ChatGPT Web rejects untrusted redirect, blank page, and 200 challenge title', async () => {
+  for (const [statusCode, headers, body, expected] of [
+    [302, { Location: 'https://portal.example/login?next=chatgpt.com' }, '', '跳转未确认'],
+    [302, { Location: 'https://auth.openai.com.evil.example/authorize' }, '', '跳转未确认'],
+    [204, {}, '', '页面状态不明'],
+    [200, {}, '<html><title>Just a moment...</title><body>Checking your browser</body></html>', '验证拦截']
+  ]) {
+    const out = await probe({ 'chatgpt.com': { statusCode, headers, body } })
+    assert.ok(out.includes('ChatGPT: </b>' + expected), statusCode + ': ' + body)
+    assert.ok(!out.includes('ChatGPT: </b>网页可达'), statusCode + ': ' + body)
+  }
+})
+
+test('ChatGPT legitimate first-party login redirects are reachable without proving unlock', async () => {
+  for (const location of ['/login', 'https://auth.openai.com/authorize', 'https://chatgpt.com/auth/login']) {
+    const out = await probe({
+      'chatgpt.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(out.includes('ChatGPT: </b>网页可达 (解锁未证实)'), location)
+  }
+})
+
+test('Gemini Web accepts only real Google login hosts', async () => {
+  for (const location of [
+    'https://accounts.google.com.evil.example/login',
+    'https://login.example/?next=https://accounts.google.com/',
+    'https://gemini.google.com@portal.example/login',
+    'http://accounts.google.com/login'
+  ]) {
+    const out = await probe({
+      'gemini.google.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(out.includes('Gemini: </b>重定向异常'), location)
+    assert.ok(!out.includes('Gemini: </b>登录跳转'), location)
+  }
+  const legitimate = await probe({
+    'gemini.google.com': { statusCode: 302, headers: { Location: 'https://accounts.google.com/signin/v2' }, body: '' }
+  })
+  assert.ok(legitimate.includes('Gemini: </b>登录跳转 (解锁未证实)'))
+})
+
+test('Gemini HTTP 200 challenge title is not a usable page', async () => {
+  const out = await probe({
+    'gemini.google.com': { statusCode: 200, body: '<html><title>Just a moment...</title></html>' }
+  })
+  assert.ok(out.includes('Gemini: </b>验证拦截'), out)
+})
+
+test('Google mainland detection must parse redirect HOST, not its URL parameters', async () => {
+  for (const location of [
+    'https://www.google.com.hk/?next=google.cn',
+    'https://other.example/login?redirect=https://www.google.cn/',
+    'https://www.google.cn.evil.example/',
+    'https://google.cn@other.example/redirect'
+  ]) {
+    const out = await probe({
+      'www.google.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(!out.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), location)
+  }
+  const real = await probe({
+    'www.google.com': { statusCode: 302, headers: { Location: 'https://www.google.cn/search' }, body: '' }
+  })
+  assert.ok(real.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), real)
+})
+
+test('ChatGPT and Gemini HTML static challenge strings remain harmless', async () => {
+  const out = await probe({
+    'chatgpt.com': { statusCode: 200,
+      body: '<html><title>ChatGPT</title><script>let msg="Just a moment..."</script></html>' },
+    'gemini.google.com': { statusCode: 200,
+      body: '<html><title>Gemini</title><script>let msg="verify you are human"</script></html>' }
+  })
+  assert.ok(out.includes('ChatGPT: </b>网页可达'))
+  assert.ok(out.includes('Gemini: </b>网页可达'))
+})
+
+test('ChatGPT/Gemini web checks explicitly disable automatic redirects', async () => {
+  const { requests } = await probeRuntime()
+  for (const host of ['https://chatgpt.com', 'https://gemini.google.com/app']) {
+    const req = requests.find(r => r.url === host)
+    assert.ok(req, host)
+    assert.equal(req.opts.redirection, false)
+  }
+})
+
+test('Gemini HTTP 200 without the official models response is inconclusive', async () => {
+  const bogus = await probe({
+    'generativelanguage.googleapis.com': { statusCode: 200, body: '<html>Proxy Login</html>' }
+  })
+  assert.ok(bogus.includes('Gemini API: </b>响应格式不明 (200)'), bogus)
+  const official = await probe({
+    'generativelanguage.googleapis.com': {
+      statusCode: 200,
+      body: '{"models":[{"name":"models/gemini-example","version":"001"}]}'
+    }
+  })
+  assert.ok(official.includes('Gemini API: </b>接口响应成功 (解锁未证实)'), official)
+})
+
+test('Google China Location header without an HTTP redirect does not prove mainland routing', async () => {
+  for (const statusCode of [200, 201, 204, 403]) {
+    const out = await probe({
+      'www.google.com': {
+        statusCode,
+        headers: { Location: 'https://www.google.cn/search' },
+        body: statusCode === 200 ? '<html><title>Google</title></html>' : ''
+      }
+    })
+    assert.ok(!out.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), String(statusCode))
+    if (statusCode === 200) assert.ok(out.includes('未观察到大陆跳转'), out)
+  }
+})
+
+// 2026-10-29: Claude 不支持地区会 302 到 app-unavailable-in-region；
+// QX 默认跟随重定向，落地页为 200 且标题 "App unavailable in region"。
+test('Claude region-unavailable landing page (redirect followed) is not reported reachable', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 200,
+      headers: {},
+      body: '<html><head><title>App unavailable in region | Claude by Anthropic</title></head><body>App unavailable</body></html>'
+    }
+  })
+  assert.ok(out.includes('Claude: </b>未支持'))
+  assert.ok(!out.includes('Claude: </b>网页可达'))
+})
+
+test('Claude 302 to app-unavailable-in-region is reported as unsupported', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 302,
+      headers: { Location: 'https://www.anthropic.com/app-unavailable-in-region' },
+      body: ''
+    }
+  })
+  assert.ok(out.includes('Claude: </b>未支持'))
+})
+
+test('Claude region wording inside script bundles is not region evidence', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 200,
+      headers: {},
+      body: '<html><head><title>Claude</title></head><script>const m = "App unavailable in region"</script></html>'
+    }
+  })
+  assert.ok(out.includes('Claude: </b>网页可达 (解锁未证实)'))
+})
+
+test('explicit Anthropic/OpenAI unsupported-region wording is recognised on API probes', async () => {
+  const anthropic = await probe({
+    'api.anthropic.com': {
+      statusCode: 400,
+      body: '{"type":"error","error":{"message":"Access to Anthropic models is not allowed from unsupported countries, regions, or territories."}}'
+    }
+  })
+  assert.ok(anthropic.includes('Claude API: </b>地区受限'))
+  const openai = await probe({
+    'api.openai.com': {
+      statusCode: 403,
+      body: '{"error":{"message":"Country, region, or territory not supported"}}'
+    }
+  })
+  assert.ok(openai.includes('OpenAI API: </b>地区受限'))
+})
+
+test('bare Claude API 403 stays indeterminate and is not called a region block', async () => {
+  const out = await probe({
+    'api.anthropic.com': {
+      statusCode: 403,
+      body: '{"error":{"type":"forbidden","message":"Request not allowed"}}'
+    }
+  })
+  assert.ok(out.includes('Claude API: </b>访问受限 (403'))
+  assert.ok(!out.includes('Claude API: </b>地区受限'))
+})
+
+test('Claude region redirect checks first-party host/path, not arbitrary URL text', async () => {
+  for (const location of [
+    'https://portal.example/login?next=/app-unavailable-in-region',
+    'https://anthropic.com.evil.example/app-unavailable-in-region',
+    'https://anthropic.com@portal.example/app-unavailable-in-region',
+    'http://www.anthropic.com/app-unavailable-in-region',
+    'https://www.anthropic.com/?next=/app-unavailable-in-region'
+  ]) {
+    const out = await probe({ 'claude.ai': { statusCode: 302, headers: { Location: location }, body: '' } })
+    assert.ok(!out.includes('Claude: </b>未支持'), location)
+  }
+  const valid = await probe({
+    'claude.ai': { statusCode: 302,
+      headers: { Location: 'https://www.anthropic.com/app-unavailable-in-region?ref=claude' }, body: '' }
+  })
+  assert.ok(valid.includes('Claude: </b>未支持'), valid)
+})

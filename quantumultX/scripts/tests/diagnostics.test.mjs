@@ -100,10 +100,10 @@ test("manual GEO query falls back to Cloudflare with IP and country only", async
   assert.doesNotMatch(out.calls[0].htmlMessage, /<b>ASN：/);
 });
 
-test("node reputation reports only a limited open-proxy clue, not purity score", async () => {
+test("node reputation reports limited proxy-category clue, not purity score", async () => {
   const out = await run("node-reputation.js");
   assert.equal(out.calls.length, 1);
-  assert.match(out.calls[0].htmlMessage, /不代表纯净或住宅/);
+  assert.match(out.calls[0].htmlMessage, /不能证明住宅或低风险/);
   assert.doesNotMatch(out.calls[0].htmlMessage, /100%/);
   assert.match(out.requests[1].url, /\?ip=203\.0\.113\.9$/);
   assert.ok(out.requests.every((x) => x.opts.policy === "Node <b>1</b>"));
@@ -117,7 +117,7 @@ test("node reputation handles second provider rate limit as unknown", async () =
   });
   assert.equal(out.calls.length, 1);
   assert.match(out.calls[0].htmlMessage, /暂不可用/);
-  assert.doesNotMatch(out.calls[0].htmlMessage, /检测到开放代理/);
+  assert.doesNotMatch(out.calls[0].htmlMessage, /检测到代理特征/);
 });
 
 test("traffic check groups by candidate and keeps sorted names attached to amounts", async () => {
@@ -148,28 +148,39 @@ test("traffic check reports QX unsupported stats explicitly", async () => {
   assert.match(out.calls[0].htmlMessage, /未提供流量统计/);
 });
 
-test("service checker treats unauthenticated/rate-limited responses as unverified", async () => {
-  const out = await run("streaming-ui-check.js", { fetch: (req) => {
-    if (req.url.includes("/cdn-cgi/trace"))
-      return { statusCode: 200, body: "loc=TW\n", headers: {} };
-    if (req.url.includes("api.anthropic.com"))
-      return { statusCode: 401, body: "invalid", headers: {} };
-    if (req.url.includes("api.openai.com"))
-      return { statusCode: 429, body: "rate limit", headers: {} };
-    if (req.url.includes("generativelanguage.googleapis.com"))
-      return { statusCode: 400, body: "invalid", headers: {} };
-    if (req.url === "https://www.google.com/")
-      return { statusCode: 302, body: "", headers: { location: "https://www.google.com.hk/" } };
-    if (req.url.includes("disney.api.edge.bamgrid.com"))
-      return { statusCode: 401, body: "", headers: {} };
-    return { statusCode: 200, body: "<html lang='en'></html>", headers: {} };
-  }});
+test("IP2Location is_proxy=true does not assert an open/public proxy", async () => {
+  const out = await run("node-reputation.js", { fetch: req =>
+    req.url.includes("ipwho.is")
+      ? { statusCode: 200, body: JSON.stringify(sample) }
+      : { statusCode: 200, body: JSON.stringify({ is_proxy: true }) }
+  });
   assert.equal(out.calls.length, 1);
   const html = out.calls[0].htmlMessage;
-  assert.match(html, /Claude API: <\/b>端点可达（未鉴权）/);
-  assert.match(html, /OpenAI API: <\/b>已限流/);
-  assert.match(html, /Gemini API: <\/b>端点可达（未鉴权）/);
-  assert.match(html, /香港跳转（不是大陆证据）/);
-  assert.match(html, /🇹🇼/);
-  assert.doesNotMatch(html, /Google 送中: <\/b>是/);
+  assert.match(html, /代理特征（类型未判定）/);
+  assert.doesNotMatch(html, /开放代理/);
+});
+
+test("traffic check safely aggregates prototype-named node tags", async () => {
+  const out = await run("traffic-check.js", {
+    policy: "ProtoGroup",
+    message: msg => {
+      if (msg.action === "get_customized_policy") return {
+        ret: { ProtoGroup: { candidates: ["__proto__", "constructor", "toString"] } }
+      };
+      if (msg.action === "get_traffic_statistics") return {
+        ret: {
+          p: { name: "__proto__", type: "tcp", rx_transfer: 2097152, tx_transfer: 0 },
+          c: { name: "constructor", type: "udp", rx_transfer: 1048576, tx_transfer: 0 },
+          t: { name: "toString", type: "tcp", rx_transfer: 524288, tx_transfer: 0 }
+        }
+      };
+      return { error: "unsupported" };
+    }
+  });
+  assert.equal(out.calls.length, 1);
+  const html = out.calls[0].htmlMessage;
+  assert.match(html, /3\.5 MiB/);
+  assert.match(html, /1\. __proto__： 2\.0 MiB/);
+  assert.match(html, /2\. constructor： 1\.0 MiB/);
+  assert.match(html, /3\. toString： 512\.0 KiB/);
 });

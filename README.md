@@ -14,7 +14,6 @@ QxRuleSet/
 │       ├── ai-rules.md
 │       ├── configuration.md
 │       ├── dependencies.md
-│       ├── diagnostics.md
 │       ├── ios.md
 │       ├── openai.md
 │       ├── rules.md
@@ -76,10 +75,12 @@ QxRuleSet/
     │   ├── geo-location-checker.js
     │   ├── geo-query.js
     │   ├── node-reputation.js
-    │   ├── streaming-ui-check.js
     │   ├── traffic-check.js
+    │   ├── streaming-ui-check.js
     │   └── tests/
-    │       └── diagnostics.test.mjs
+    │       ├── claude-node-sifter.test.mjs
+    │       ├── diagnostics.test.mjs
+    │       └── streaming-ui-check.test.mjs
     └── templates/
         └── subscription-normalization.conf.example
 ```
@@ -87,6 +88,7 @@ QxRuleSet/
 ## Documentation
 
 - [Quantumult X 配置](docs/quantumultx/configuration.md)
+- [Quantumult X 节点自动故障恢复（第一阶段）](docs/quantumultx/failover.md)
 - [Quantumult X iOS 维护](docs/quantumultx/ios.md)
 - [iOS Rewrite 资产清单与维护](docs/quantumultx/rewrites.md)
 - [从模板到可用配置](docs/quantumultx/setup.md)
@@ -97,8 +99,8 @@ QxRuleSet/
 - [AI 安全节点筛选](docs/quantumultx/ai-node-sifter.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
-- [诊断脚本（地理位置 / 节点风险 / 流量 / 服务解锁）](docs/quantumultx/diagnostics.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
+- [GEO、节点风险线索与策略流量诊断](docs/quantumultx/diagnostics.md)
 - [订阅节点规范化](docs/quantumultx/subscription-normalization.md)
 - [Mihomo / Clash Party（Windows）](docs/mihomo/setup.md)
 - [HomeProxy](docs/homeproxy.md)

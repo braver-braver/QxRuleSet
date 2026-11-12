@@ -27,9 +27,30 @@
 - `cn.list`
 - `rules/corrections/direct.list`
 - `streaming-ui-check.js`
-- GEO、IP 网络属性与流量查询脚本
+- `geo-location-checker.js`、`geo-query.js`、`node-reputation.js` 和 `traffic-check.js`
 
 这些资源的变化需要经过本仓库审查，避免上游规则突然改变策略优先级。
+
+## 2026-10-11 上游同步基线
+
+已按上游代码与发布消息复核：
+
+| 上游项目 | 最新已核查变动 | 本仓库的处理 |
+| --- | --- | --- |
+| [KOP-XIAO resource-parser.js](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/resource-parser.js) | 2026-10-09，commit [29ef748](https://github.com/KOP-XIAO/QuantumultX/commit/29ef7480402d145396c84082a6f9316fe12931d4) | iOS/macOS 继续指向 `master`，**没有本地源码副本，也不需改 URL**；QX 客户端仍须刷新资源解析器缓存 |
+| [KOP-XIAO streaming-ui-check.js](https://github.com/KOP-XIAO/QuantumultX/blob/master/Scripts/streaming-ui-check.js) | 最后一次该文件提交 2023-06-30 | 不直接覆盖本仓库已独立维护的 `streaming-ui-check.js` v3.2.0 |
+| Quantumult X App | iOS App Store 1.8.1（2026-10-07）；1.9.0（952）TestFlight（2026-10-08，iOS/tvOS/macOS） | 只更新兼容性说明，不把测试版功能强制加入稳定模板 |
+
+解析器的新行为（按客户端版本判断，不等于模板必须改造）：
+
+- **build 950+**：分流/重写规则允许以 `{# note #}` 携带说明；旧版客户端无法使用该行首语法。现有仓库 ruleset 保持不含这类行首说明。
+- **build 951+**：本地或 iCloud 资源路径后的 `#in=...&out=...` 参数可直接交给解析器；旧版仍需按上游原有的资源首行参数约定。
+- **build 952（1.9.0 测试版）**：客户端新增 `reflected_routes` 等功能；目前不是本仓库的必需功能，不应在稳定模板中默认启用。
+- GEO / 节点网络特征 / 策略流量诊断已接入本仓库维护脚本；广告过滤列表和可选 WeatherKit Rewrite 仍保留上游。本次没有理由将它们整体 Fork 或替换。
+
+> **版本边界**：`QxRuleSet-Template-Version` 是本仓库的配置模板 CalVer，**不是** Quantumult X App 构建号，也不代表已导入设备的私有 Profile 自动更新。动态引用上游的 URL 不代表客户端缓存已经同步。
+
+详见 [版本定位与增量升级](upgrade.md) 中的上游刷新流程。
 
 ## 继续跟随上游
 
@@ -47,23 +68,25 @@ KOP-XIAO/QuantumultX/Scripts/resource-parser.js
 
 如果订阅本身已经是 Quantumult X 原生格式，可以在 `[server_remote]` 中使用 `opt-parser=false`，此时对 parser 的依赖会进一步降低。
 
-### Adblock4limbo
+### Adblock4limbo（2026-11-12 核查）
 
-保留：
-
-```text
-Adblock4limbo.list
-```
-
-作为专业广告过滤数据源。
-
-其 Rewrite：
+上游官方仓库：[`limbopro/Adblock4limbo`](https://github.com/limbopro/Adblock4limbo)。iOS/macOS 统一指向其 GitHub 源码目录，不再使用额外的 `limbopro.com` 文件分发入口：
 
 ```text
-Adblock4limbo.conf
+https://raw.githubusercontent.com/limbopro/Adblock4limbo/main/QuantumultX/rule/Adblock4limbo.list
 ```
 
-在模板中默认 `enabled=false`。
+**关键兼容性约束：`[filter_remote]` 必须配置 `opt-parser=true`。** 即便 upstream 将文件放在 `QuantumultX/rule/` 下，其实际内容仍是 `DOMAIN` / `DOMAIN-SUFFIX` / `DOMAIN-KEYWORD` 规则；本仓库原生 QX 语法是 `HOST` 系列。当前 `KOP-XIAO/QuantumultX` 资源解析器可转换 `DOMAIN*` → `HOST*`，而之前的 `opt-parser=false` 存在直接加载格式不兼容的风险。此处使用自定义 `resource_parser_url`，切勿仅复制远端 URL、遗漏解析器设置。
+
+可选 Rewrite 使用：
+
+```text
+https://raw.githubusercontent.com/limbopro/Adblock4limbo/main/QuantumultX/rewrite/Adblock4limbo.conf
+```
+
+仍保持 `enabled=false, opt-parser=false`，不自动启用 MITM。改动解决**静态导入配置**，不能证明你本机已刷新 QX 缓存或所有广告域名都有效。
+
+其他服务分流仍由本仓库控制，不照搬 Adblock4limbo 的大范围第三方策略；如发生误拦截，请先看 QX 请求命中和远程资源刷新日志。
 
 因此基础分流配置不需要 MITM。只有用户主动开启 Rewrite 后，才需要配置并信任 MITM 证书。
 
@@ -94,14 +117,14 @@ NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit.snippet
 
 ### 诊断工具：本仓库维护脚本，第三方服务提供数据
 
-Quantumult X 的 GEO、节点网络属性、策略流量、服务解锁查询均由 `quantumultX/scripts/` 自维护：
+Quantumult X 的 GEO、节点网络属性、策略流量和服务解锁查询由 `quantumultX/scripts/` 维护：
 
-- `ipwho.is`：HTTPS IP 地理与 ASN/ISP；无 API Key，免费接口有限流，**不提供完整安全/风险数据**。
-- `IP2Location.io`：免 Key HTTPS 查询，免费层只有有限的开放代理信号；不能作为住宅 IP 或“纯净度”的证明。
-- `Cloudflare Trace`：手动 GEO 查询的 IP/地区备用信号，不提供城市/ASN。
-- `get_traffic_statistics`：仅从 QX 本地配置接口读取流量，不上传。
+- `ipwho.is`：HTTPS IP 地理与 ASN/ISP，免费接口可能限流，不是完整风控数据库。
+- `IP2Location.io`：免 Key 的 `is_proxy` 仅是综合代理特征，不等于「开放代理」或任何平台的风控结果。
+- `Cloudflare Trace`：GEO 查询的 IP/地区降级数据源，不推测城市或 ASN。
+- `get_traffic_statistics`：使用 QX 配置接口读取流量，不上传订阅/密码。
 
-诊断脚本失效不会影响订阅、DNS、filter routing、节点选择或基础代理。详见 [诊断脚本维护](diagnostics.md)。
+诊断失败不影响订阅、DNS、分流或节点选择；详见 [诊断脚本维护](diagnostics.md)。
 
 ### 图标
 
@@ -167,6 +190,6 @@ quantumultX/rules/corrections/direct.list
 
 1. 订阅格式解析器。
 2. 大规模广告/隐私规则库。
-3. 人工触发的诊断脚本。
+3. 与核心分流无关、并且可以单独审计的第三方数据源。
 4. 图标、展示资源。
 5. 需要高频跟踪生态变化、但不改变核心策略边界的数据源。

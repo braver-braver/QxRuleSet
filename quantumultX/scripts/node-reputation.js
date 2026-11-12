@@ -1,11 +1,11 @@
 /**
- * QxRuleSet Node Reputation Clues v1.0.0
- * Updated: 2026-10-09T10:57:33+08:00
+ * QxRuleSet Node Reputation Clues v1.0.1
+ * Updated: 2026-11-12T11:39:00+08:00
  * This is NOT an IP purity score. Free public data only checks limited signals.
  */
 (function () {
   var policy = String(($environment && $environment.params) || "").trim();
-  var title = "🧪 节点纯净度查询";
+  var title = "🧪 节点风险线索（非纯净度）";
   function esc(x) {
     return String(x == null ? "" : x).replace(/&/g,"&amp;").replace(/</g,"&lt;")
       .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
@@ -63,14 +63,14 @@
       var risk = JSON.parse(response.body || "{}");
       if (!risk || risk.error) throw new Error("reputation data");
       if (risk.is_proxy === true) {
-        text += "<br><b>公开代理线索：</b>检测到开放代理标记 ⚠️";
+        text += "<br><b>代理特征线索：</b>检测到代理特征（类型未判定）⚠️";
       } else if (risk.is_proxy === false) {
-        text += "<br><b>公开代理线索：</b>未检出开放代理标记（不代表纯净或住宅）";
+        text += "<br><b>代理特征线索：</b>未检出代理特征（不能证明住宅或低风险）";
       } else {
-        text += "<br><b>公开代理线索：</b>免费接口未提供";
+        text += "<br><b>代理特征线索：</b>免费接口未提供";
       }
     } catch (_) {
-      text += "<br><b>公开代理线索：</b>暂不可用（API 限流/网络失败）";
+      text += "<br><b>代理特征线索：</b>暂不可用（API 限流/网络失败）";
     }
     text += "<br><small>ipwho.is + IP2Location.io 免费数据；不检测平台风控、完整 VPN/机房风险，也不生成“纯净度百分比”。</small>";
     show(text);
