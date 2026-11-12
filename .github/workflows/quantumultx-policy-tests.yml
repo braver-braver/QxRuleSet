@@ -8,6 +8,7 @@ on:
       - 'quantumultX/tests/**'
       - 'quantumultX/rules/services/apple*.list'
       - 'quantumultX/rules/services/bilibili*.list'
+      - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   push:
@@ -21,6 +22,7 @@ on:
       - 'quantumultX/tests/**'
       - 'quantumultX/rules/services/apple*.list'
       - 'quantumultX/rules/services/bilibili*.list'
+      - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
       - '.github/workflows/quantumultx-policy-tests.yml'
   workflow_dispatch:

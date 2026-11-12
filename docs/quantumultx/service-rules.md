@@ -12,6 +12,7 @@ quantumultX/rules/services/
 ├── bilibili.list
 ├── bilibili-video.list
 ├── bilibili-pcdn.list  # 可选、默认关闭
+├── github-pages.list
 ├── bing.list
 ├── github.list
 ├── google.list
@@ -31,6 +32,7 @@ quantumultX/rules/services/
 | `social.list` | `社交媒体` | X、Reddit、Meta、Discord、Telegram、Bluesky |
 | `google.list` | `谷歌服务` | Google Search、Gmail、Drive、API、静态资源与下载基础设施 |
 | `github.list` | `GitHub服务` | GitHub Web/API/Git、静态资源、release、GHCR、Copilot 及 npm 相关域名 |
+| `github-pages.list` | `GitHub服务` | 独立高优先级 GitHub Pages（仅 `github.io`） |
 | `media.list` | `国际媒体` | BBC、Zaobao、Reuters、Bloomberg、FT、NYT、WSJ、Nikkei 等国际新闻媒体 |
 | `youtube.list` | `油管服务` | YouTube Web / API / video CDN |
 | `bing.list` | `Bing服务` | Bing Search 与相关服务 |
@@ -180,6 +182,14 @@ GitHub ruleset 以域名为主，覆盖：
 - npm
 
 不再维护 `20.205.243.*` 等固定 GitHub IP。GitHub 官方也建议网络控制优先使用 DNS / domain 方式，因为服务 IP 地址会随基础设施调整。
+
+### GitHub Pages 路由优先级（2026-11-04）
+
+iOS 和 macOS 模板在 `[filter_remote]` 的第一条资源加载 `github-pages.list`，并指定 `force-policy=GitHub服务, inserted-resource=true`。它仅包含 `HOST-SUFFIX,github.io`，在 Quantumult X 中插入到普通 `[filter_local]` 规则之前，避免解析异常时本地 `geoip, cn, direct` 抢先选路；其他 GitHub 域名仍由现有 `github.list` 处理。原 `github.list` 的 `github.io` 规则保留，用于兼容尚未迁移的个人 Profile。
+
+这是对**规则匹配优先级**的防护，并不是 DNS 污染、地区节点故障、运营商路由不稳或 Pages 网站本身配置错误的充分修复。不要为 Pages 增加固定 IP、宽泛的 CDN 通配符，或无证据地替换全局 DoH。
+
+旧个人 Profile 需要手动在 `[filter_remote]` 首位加入模板中的 `GitHub Pages优先` 资源，然后刷新该远端资源。实际验收请打开具体的 `user.github.io` 页面，在 Quantumult X 请求日志确认命中 `GitHub服务`，并临时选用一个明确可达的固定代理节点与默认自动选择组做 A/B 对比。离线测试仅检查规则范围、模板引用和优先级声明，不能替代真机或节点测试。若页面仍加载不全，检查它是否使用独立 CDN 或自定义域名，而不是把整段云服务地址纳入 GitHub 规则。
 
 ## 维护原则
 
