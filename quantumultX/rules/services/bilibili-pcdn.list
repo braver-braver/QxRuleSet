@@ -1,0 +1,12 @@
+## EXPERIMENTAL: BiliBili PCDN opt-in reject; DISABLED in both templates.
+## version: 0.1.0
+## updated: 2026-11-07
+## Loaded with force-policy=reject and inserted-resource=true only when opted in.
+## Blocking these domains can break BiliBili TV/Live or cause retry stalls.
+## Do not enable unless a specific bad PCDN hostname is observed in QX logs.
+## Turn it back off if playback, live or BiliBili TV stops working.
+## IP:port-based PCDN cannot be reliably handled by hostname-only rules.
+
+HOST-SUFFIX,mcdn.bilivideo.cn,reject
+HOST-SUFFIX,mcdn.bilivideo.com,reject
+HOST-SUFFIX,v1d.szbdyd.com,reject
