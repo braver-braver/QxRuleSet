@@ -46,7 +46,7 @@ Quantumult X `event-interaction` 脚本。
 - `$configuration.sendMessage`
 - `$done`
 
-脚本中的测试 API Key 仅用于根据 HTTP 状态判断服务端点是否可达，不应替换为真实账号密钥。
+脚本使用明显无效的测试 API Key；仅当 HTTP 状态及服务端结构化错误**一致**时才将结果标记为「接口可达（未认证）」，不应替换为真实账号密钥。该结果不证明模型调用权限、账户订阅或地区许可。
 
 ## 修改检查
 
@@ -142,38 +142,37 @@ event-interaction https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs
 
 所有新增验证使用模拟 QX 环境（**无法模拟真实 QX UI / 节点出口 / 账号权限**）。CI 可以证明脚本语法和模拟分支行为正确，不代表脚本在特定 iPhone 或 Mac 上已经完成真实解锁检查。
 
+## 2026-10-29 Claude API / Web 检测收敛（v3.4.2）
 
-## 2026-10-29 脚本维护（v3.4.1）
+- 无效 Key 探测仅在结构化 Anthropic `authentication_error`（HTTP 401）或 `invalid_request_error`（HTTP 400）时显示「接口可达（未认证）」；泛化的 400/401 可能来自代理或网关，改为「状态不明」。
+- 明确地区拒绝（包括 HTTP 451、响应体中的区域限制）优先于认证状态；429/529 继续标为「限流/繁忙」，不报告完整解锁。
+- [第三方 Claude IP 检测](https://ip.net.coffee/claude/) 仅能提供出口 IP、浏览器环境及网络质量线索，不能替代通过 `$task.fetch` 和明确 `opts.policy` 对目标节点的检查；第三方信任分不等于 Anthropic 官方账号判定。
+- Claude Web 请求设为 `redirection=false`：仅允许明确属于 Claude/Anthropic 的登录跳转；未知重定向、Cloudflare challenge 跳转以及空页面 HTTP 204 不认定为网页正常。HTTP 200 若 HTML 标题明确显示人机验证，也不再被误判为可访问的 Claude 页面。
+- 回归测试采用脱敏 QX 模拟响应；未验证 Quantumult X 真机、真实代理节点或登录账号模型调用。
 
-### Claude 网页：识别「所在地区不支持」落地页
+## 2026-11-11 认证响应与重定向核验（v3.5.0）
 
-Claude 在不支持的地区访问 `claude.ai` 时，会 302 跳转到 `https://www.anthropic.com/app-unavailable-in-region`（继续跳到 `claude.com` 同路径），落地页标题为 `App unavailable in region | Claude by Anthropic`。QX 默认跟随重定向，旧版脚本只匹配 `country not supported` 一类标题，因此会把这个 200 落地页报告为「网页可达」。
+本轮针对无效 Key 检测中出现的**状态码误判**和网页跳转误判做保守修复，不新增登录、真实 API Key、视频播放或账户查询。
 
-- 新增 `isClaudeRegionUnavailable()`：同时检查 `Location` 头含 `app-unavailable-in-region`（未跟随重定向时），以及落地页 `<title>` 含 `app unavailable in region`（已跟随时）。命中后报告「未支持」。
-- **只检查标题和 Location，不扫描整页文案**：SPA 脚本中可能含有同样的字符串，沿用「普通文案不单独作为判据」的约定。回归测试覆盖了这一点。
+- **OpenAI API**：仅将 HTTP 401 且带有结构化 `error.code=invalid_api_key` 的响应报告为「接口可达（未认证）」。代理/网关生成的普通 401 改为「状态不明」。HTTP 451 单独报告「地区/法律限制」，401 中明确的地区限制不再被认证分支覆盖。
+- **Gemini API（GenerateContent/Generative Language）**：对 HTTP 400/401 要求 Google `error.details[]` 中包含 `google.rpc.ErrorInfo`、`reason=API_KEY_INVALID`、`domain=googleapis.com` 及 `metadata.service=generativelanguage.googleapis.com`，且 HTTP 状态和 `error.status` 相符。泛用 400、缺字段、错误的服务域名保持「状态不明」。仅真实 `models` JSON 响应才能把 HTTP 200 标为「接口响应成功（解锁未证实）」。`FAILED_PRECONDITION` 等明确地区拒绝优先处理。
+- **ChatGPT Web / Gemini Web**：拒绝把陌生站点的 301/302 等跳转、协议降级、用户信息伪装和空 HTTP 204 页面算作可达；只认可目标服务/明确登录主机的 HTTPS 跳转。Cloudflare 的 `cf-mitigated: challenge` 以及页面实际 `<title>` 为验证标题时标为「验证拦截」，普通页面 JavaScript 内的相关字串不构成证据。
+- **Google 送中**：仅在 **HTTP 3xx 真正重定向** 时检查 `Location` URL 的**真实 hostname** 是否为 `google.cn` / `google.com.cn` 或其子域名；HTTP 200/201/204 等携带 `Location` 也不能当作跳转证据，不能仅凭 URL 查询参数出现 `google.cn` 就报告“可能送中”。仍不以简体页面或语言参数推断节点地区。
+- **稳定性**：保留 8.5 秒全局看门狗、统一 `$done`、2.0–6.2 秒各项请求上限、无登录探测、selftest 以及部分结果回传机制。
 
-### API 明确地区措辞
+对照资料：[OpenAI API 官方错误码](https://developers.openai.com/api/docs/guides/error-codes)、[Google Gemini GenerateContent API 官方错误格式](https://ai.google.dev/gemini-api/docs/generate-content/api-errors)、[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)。
 
-`hasExplicitRegionMessage()` 增加两条明确措辞，仅在响应正文明确写出时才报告「地区受限」：
-
-- Anthropic：`Access to Anthropic models is not allowed from unsupported countries, regions, or territories.`
-- OpenAI：`Country, region, or territory not supported`
-
-### Claude API 403 措辞
-
-Claude Code 官方排障文档对 `403` 的解释是「代理/网络过滤拦截主机，或所在地区不受支持」；`403 Request not allowed` 也可能来自订阅/角色权限问题。无可证明地区的响应正文时，Claude API 的 403 现显示「访问受限 (403，地区或代理拦截待查)」，**不再暗示是地区封锁**，也不把它升级为「地区受限」。
-
-### 未改动与证据边界
-
-- **Gemini Web、ChatGPT Web 的不支持地区页面**：未找到可靠的、可复核的页面特征，本次没有新增启发式判断，保持现有「页面可达（解锁未证实）」语义。
-- 以上 Claude 网页行为来自 Anthropic 官方 `app-unavailable-in-region` 页面内容及公开 issue 中的用户报告（**未在受限地区的真实 QX 出口上复现**）。新增测试使用模拟响应，不代表真机验证；上线后建议用一个已知受限出口与一个已知支持出口各跑一次。
-- 与 v3.4.0 相同：更新 `main` 后，QX 设备上的远程脚本缓存需手动刷新。
-
-### 回归测试
+回归命令：
 
 ```bash
 node --check quantumultX/scripts/streaming-ui-check.js
 node --test quantumultX/scripts/tests/*.test.mjs
 ```
 
-新增 5 项（共 26 项）：落地页（已跟随）/ 302 Location（未跟随）/ 脚本内同样文案不误报 / Anthropic 与 OpenAI 明确措辞 / 裸 403 不当作地区封锁。其中前 3 类在 v3.4.0 上会失败。
+**限制**：CI 是模拟 Quantumult X `$task.fetch`、策略状态与响应格式的离线测试。它不能替代 iOS/macOS 真机、真实节点出口、账号订阅或实际播放验证。合并后仍需 QX 客户端手动刷新远程脚本缓存。
+
+## 2026-11-12 Claude 地区落地页识别（v3.5.1）
+
+在保留 v3.5.0 的 API 判定和安全跳转验证基础上，补充 Claude 官方不支持地区落地页 `/app-unavailable-in-region` 的识别：仅 HTTP 3xx 指向 Claude/Anthropic 第一方 HTTPS 路径，或真实 HTML `<title>` 为 `App unavailable in region` 才判定「未支持」。不扫描 JavaScript bundle 文案，也不把第三方 URL 查询参数视为地区证据。
+
+同时补充 Anthropic、OpenAI 的明确地区拒绝文本；Claude API 普通 403 仍只标记为「访问受限（地区或代理拦截待查）」。这属于离线响应模拟，不能代表 QX 真机、账号或节点地区许可已验证。

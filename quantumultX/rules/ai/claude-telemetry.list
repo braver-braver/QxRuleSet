@@ -1,0 +1,10 @@
+## OPTIONAL Claude Code telemetry. Not loaded by iOS/macOS templates.
+## version: 0.1.0
+## updated: 2026-10-29
+## Source: https://code.claude.com/docs/en/network-config#network-access-requirements
+## Shared Datadog endpoints: exact HOSTs may still carry other apps' traffic.
+## Load with force-policy=ClaudeAi服务 ONLY when deliberately opted in.
+## Claude Code can disable both via CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1.
+
+HOST,http-intake.logs.us5.datadoghq.com,ClaudeAi服务
+HOST,browser-intake-us5-datadoghq.com,ClaudeAi服务

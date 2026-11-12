@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.4.1 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.5.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-10-29
+ * 更新: 2026-11-12
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
@@ -177,22 +177,8 @@ function hasExplicitRegionMessage(body) {
     text.indexOf('not available in your country') !== -1 ||
     text.indexOf('not available in your region') !== -1 ||
     text.indexOf('service is not available in your territory') !== -1 ||
-    // Anthropic: "Access to Anthropic models is not allowed from unsupported
-    // countries, regions, or territories."；OpenAI: "Country, region, or
-    // territory not supported"。仅匹配明确措辞。
     text.indexOf('not allowed from unsupported countries') !== -1 ||
     text.indexOf('country, region, or territory not supported') !== -1
-}
-
-// Claude 网页在不支持地区会 302 到 anthropic.com/app-unavailable-in-region
-// （再跳到 claude.com 同路径），落地页标题为
-// "App unavailable in region | Claude by Anthropic"。QX 默认跟随重定向，因此
-// 同时检查 Location 头（未跟随时）和落地页 <title>（已跟随时）。
-// 只看标题和 Location，不扫描整页文案：SPA 脚本里可能包含同样的字符串。
-function isClaudeRegionUnavailable(resp, titleText) {
-  const location = getHeader(resp && resp.headers, 'location').toLowerCase()
-  return location.indexOf('app-unavailable-in-region') !== -1 ||
-    /app unavailable in region/.test(String(titleText || '').toLowerCase())
 }
 
 function hasApiRegionBlock(body) {
@@ -217,6 +203,81 @@ function isBotChallenge(resp, body) {
     text.indexOf('cf-chl-') !== -1 ||
     text.indexOf('checking your browser') !== -1 ||
     text.indexOf('verify you are human') !== -1
+}
+
+// Only an HTML <title> from an actual response may identify a human
+// verification page. JavaScript bundles often contain challenge strings.
+function webPageTitle(body) {
+  const match = String(body || '').match(/<title[^>]*>([^<]*)<\/title>/i)
+  return match ? match[1].trim().toLowerCase() : ''
+}
+
+function isWebChallenge(resp, body) {
+  return isBotChallenge(resp, body) ||
+    /^(?:just a moment\b|checking your browser\b|verify you are human\b)/i.test(webPageTitle(body))
+}
+
+// Do not accept a redirect just because its query string or username mentions
+// a trusted domain. Protocol-relative URLs, HTTP downgrade and unknown login
+// portals are not evidence that the requested AI website is reachable.
+function redirectHostname(location, httpsOnly) {
+  const pattern = httpsOnly
+    ? /^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i
+    : /^https?:\/\/([a-z0-9.-]+)(?::\d{1,5})?(?:[\/?#]|$)/i
+  const match = String(location || '').trim().match(pattern)
+  return match ? match[1].toLowerCase() : ''
+}
+
+function isTrustedWebRedirect(resp, allowedDomains) {
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  const host = redirectHostname(location, true)
+  return !!host && allowedDomains.some(domain =>
+    host === domain || host.endsWith('.' + domain))
+}
+
+function isOpenAIInvalidKeyResponse(body) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    const error = parsed && parsed.error
+    return !!error && typeof error === 'object' && !Array.isArray(error) &&
+      error.code === 'invalid_api_key'
+  } catch (_) {
+    return false
+  }
+}
+
+// The Generative Language REST API uses google.rpc.ErrorInfo with a service
+// identifier. Generic 400/401 bodies from a proxy must remain inconclusive.
+function isGeminiInvalidKeyResponse(body, httpStatus) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    const error = parsed && parsed.error
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return false
+    if (typeof error.code === 'number' && error.code !== httpStatus) return false
+    if (httpStatus === 400 && error.status !== 'INVALID_ARGUMENT') return false
+    if (httpStatus === 401 && error.status !== 'UNAUTHENTICATED') return false
+    if (httpStatus !== 400 && httpStatus !== 401) return false
+    if (!Array.isArray(error.details)) return false
+    return error.details.some(detail =>
+      detail && detail['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' &&
+      detail.reason === 'API_KEY_INVALID' && detail.domain === 'googleapis.com' &&
+      detail.metadata && detail.metadata.service === 'generativelanguage.googleapis.com'
+    )
+  } catch (_) {
+    return false
+  }
+}
+
+function hasGeminiModelsResponse(body) {
+  try {
+    const parsed = JSON.parse(String(body || '{}'))
+    return !!parsed && Array.isArray(parsed.models) &&
+      parsed.models.some(model => model && typeof model.name === 'string')
+  } catch (_) {
+    return false
+  }
 }
 
 function escapeHtml(value) {
@@ -323,6 +384,42 @@ async function getRegion(traceUrl) {
   return getFallbackRegion()
 }
 
+// Accept redirects only to Claude/Anthropic first-party login endpoints.
+// HTTP 302 to a captive portal is not proof that Claude Web loaded.
+function isClaudeTrustedRedirect(resp) {
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location || /\/cdn-cgi\/challenge(?:-platform)?(?:[\/?#]|$)/i.test(location)) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  const m = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!m) return false
+  const host = m[1].toLowerCase()
+  if (host === 'anthropic.auth0.com') return true
+  return ['claude.ai', 'claude.com', 'anthropic.com', 'clau.de'].some(domain =>
+    host === domain || host.endsWith('.' + domain))
+}
+
+// Match the official regional-denial landing page, not a string in page JS
+// or in an unrelated redirect query. This uses the real URL host and path.
+function isClaudeRegionUnavailable(resp, titleText) {
+  if (/^app unavailable in region(?:\b|\s|\|)/i.test(String(titleText || '').trim())) return true
+  const status = Number(resp && resp.statusCode)
+  if ([301, 302, 303, 307, 308].indexOf(status) === -1) return false
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location) return false
+  let path = ''
+  if (/^\/(?!\/)/.test(location)) {
+    path = location.split(/[?#]/)[0]
+  } else {
+    const found = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)?(?:[?#]|$)/i)
+    if (!found) return false
+    const host = found[1].toLowerCase()
+    if (!['anthropic.com', 'claude.com', 'claude.ai'].some(domain =>
+      host === domain || host.endsWith('.' + domain))) return false
+    path = found[2] || '/'
+  }
+  return /^\/app-unavailable-in-region\/?$/i.test(path)
+}
+
 // ===================== 检测: Claude Web =====================
 
 function testClaude() {
@@ -332,7 +429,7 @@ function testClaude() {
     try {
       let resp = await fetchWithTimeout({
         url: CLAUDE_WEB_URL,
-        opts: opts,
+        opts: opts_noRedirect,
         timeout: TIMEOUTS.web,
         headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }
       })
@@ -342,16 +439,20 @@ function testClaude() {
       // 只有明确的结构化标志或错误页标题才代表地区阻断；普通文案中的
       // “unavailable/restricted” 可能来自打包脚本，不能单独作为判据。
       let titleMatch = body.match(/<title[^>]*>([^<]*)<\/title>/i)
-      let deniedTitle = titleMatch && /country not supported|not available in your country/.test(titleMatch[1])
-      let accessDeniedTitle = titleMatch && /access denied/.test(titleMatch[1])
-      let regionUnavailable = isClaudeRegionUnavailable(resp, titleMatch && titleMatch[1])
-      if (isBotChallenge(resp, body)) {
+      let title = titleMatch ? titleMatch[1].trim() : ''
+      let deniedTitle = /country not supported|not available in your country/.test(title)
+      let accessDeniedTitle = /access denied/.test(title)
+      let challengeTitle = /^(just a moment\b|checking your browser\b|verify you are human\b)/i.test(title)
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isBotChallenge(resp, body) || challengeTitle) {
         result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
-      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle || regionUnavailable) {
+      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle || isClaudeRegionUnavailable(resp, title)) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403 || accessDeniedTitle) {
         result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
+      } else if (redirect && !isClaudeTrustedRedirect(resp)) {
+        result.Claude = "<b>Claude: </b>跳转未确认 (" + s + ") ⚠️"
+      } else if (s === 200 || redirect) {
         result.Claude = "<b>Claude: </b>网页可达 (解锁未证实)" + arrow + "⟦" + f + "⟧ ⚠️"
       } else {
         result.Claude = "<b>Claude: </b>异常 (" + s + ") ❗️"
@@ -360,6 +461,19 @@ function testClaude() {
       result.Claude = "<b>Claude: </b>" + networkErrorLabel(e)
     }
   })()
+}
+
+function claudeApiErrorType(body) {
+  try {
+    const response = JSON.parse(String(body || '{}'))
+    // Only the documented Anthropic { type: 'error', error: { type } }
+    // envelope is usable evidence; reject gateway-generated bare codes.
+    if (!response || response.type !== 'error' || !response.error ||
+        typeof response.error.type !== 'string') return ''
+    return response.error.type.toLowerCase()
+  } catch (_) {
+    return ''
+  }
 }
 
 // ===================== 检测: Claude API =====================
@@ -378,16 +492,19 @@ function testClaudeAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 无效密钥仅证明接口可达；明确地区阻断优先于 HTTP 状态码判断。
-      if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
+      // Generic HTTP 400/401 can be emitted by a proxy or gateway.
+      // Only structured Anthropic errors support a reachability claim.
+      const errorType = claudeApiErrorType(body)
+      if (s === 451 || hasApiRegionBlock(body)) {
         result.ClaudeAPI = "<b>Claude API: </b>地区受限 🚫"
-      } else if (s === 401 || s === 400) {
+      } else if ((s === 401 && errorType === 'authentication_error') ||
+                 (s === 400 && errorType === 'invalid_request_error')) {
         result.ClaudeAPI = "<b>Claude API: </b>接口可达 (未认证) ⚠️"
+      } else if (s === 400 || s === 401) {
+        result.ClaudeAPI = "<b>Claude API: </b>状态不明 (" + s + "，未认证) ⚠️"
       } else if (s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
       } else if (s === 403) {
-        // 官方排障文档：403 常见于代理/网络过滤拦截主机，或所在地区不受支持；
-        // 无响应正文可证明地区时，不据此断言「地区受限」。
         result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403，地区或代理拦截待查) ⚠️"
       } else {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
@@ -411,15 +528,20 @@ function testChatGPT() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
       let contentType = getHeader(resp.headers, 'content-type').toLowerCase()
-      if (isBotChallenge(resp, body)) {
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isWebChallenge(resp, body)) {
         result.ChatGPT = "<b>ChatGPT: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
       } else if (s === 451 || hasStructuredRegionBlock(body) ||
           ((s === 403 || contentType.indexOf('text/plain') !== -1) && hasExplicitRegionMessage(body))) {
         result.ChatGPT = "<b>ChatGPT: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403) {
         result.ChatGPT = "<b>ChatGPT: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
+      } else if (redirect && !isTrustedWebRedirect(resp, ['chatgpt.com', 'openai.com'])) {
+        result.ChatGPT = "<b>ChatGPT: </b>跳转未确认 (" + s + ") ⚠️"
+      } else if (s === 200 || redirect) {
         result.ChatGPT = "<b>ChatGPT: </b>网页可达 (解锁未证实)" + arrow + "⟦" + f + "⟧ ⚠️"
+      } else if (s === 204) {
+        result.ChatGPT = "<b>ChatGPT: </b>页面状态不明 (204) ⚠️"
       } else {
         result.ChatGPT = "<b>ChatGPT: </b>异常 (" + s + ") ❗️"
       }
@@ -445,11 +567,16 @@ function testOpenAIAPI() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      // 401 = invalid_api_key 仅代表接口可达，不能证明能调用模型
-      if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
+      // An arbitrary 401 may come from the proxy gateway. Only an OpenAI
+      // invalid_api_key error is positive evidence of API reachability.
+      if (s === 451) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>地区/法律限制 (451) 🚫"
+      } else if ((s >= 400 && s <= 403) && hasApiRegionBlock(body)) {
         result.OpenAIAPI = "<b>OpenAI API: </b>地区受限 🚫"
-      } else if (s === 401) {
+      } else if (s === 401 && isOpenAIInvalidKeyResponse(body)) {
         result.OpenAIAPI = "<b>OpenAI API: </b>接口可达 (未认证) ⚠️"
+      } else if (s === 401) {
+        result.OpenAIAPI = "<b>OpenAI API: </b>状态不明 (401，未认证) ⚠️"
       } else if (s === 429) {
         result.OpenAIAPI = "<b>OpenAI API: </b>限流 (未验证) ⚠️"
       } else if (s === 403) {
@@ -481,21 +608,20 @@ function testGemini() {
       let s = resp.statusCode
       let body = (resp.body || '').toLowerCase()
 
-      if (s === 302 || s === 301 || s === 307 || s === 308) {
-        // 未登录状态下 Gemini 通常会重定向到 accounts.google.com，属正常
-        let loc = getHeader(resp.headers, 'location').toLowerCase()
-        if (loc.indexOf('accounts.google.com') !== -1 ||
-            loc.indexOf('gemini.google.com') !== -1 ||
-            loc.indexOf('consent.google.com') !== -1) {
-          result.Gemini = "<b>Gemini: </b>登录跳转 (解锁未证实) ⚠️"
-        } else {
-          result.Gemini = "<b>Gemini: </b>重定向异常 ⚠️"
-        }
+      let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
+      if (isWebChallenge(resp, body)) {
+        result.Gemini = "<b>Gemini: </b>验证拦截 ⚠️"
       } else if (s === 451 || (s === 403 && (hasStructuredRegionBlock(body) || hasExplicitRegionMessage(body)))) {
         result.Gemini = "<b>Gemini: </b>未支持 🚫"
       } else if (s === 403) {
         result.Gemini = "<b>Gemini: </b>访问受限 (403) ⚠️"
-      } else if (s >= 200 && s < 400) {
+      } else if (redirect) {
+        // These login hosts are known, but the response still proves no account entitlement.
+        result.Gemini = isTrustedWebRedirect(resp,
+          ['accounts.google.com', 'gemini.google.com', 'consent.google.com'])
+          ? "<b>Gemini: </b>登录跳转 (解锁未证实) ⚠️"
+          : "<b>Gemini: </b>重定向异常 ⚠️"
+      } else if (s === 200) {
         result.Gemini = "<b>Gemini: </b>网页可达 (解锁未证实) ⚠️"
       } else {
         result.Gemini = "<b>Gemini: </b>异常 (" + s + ") ❗️"
@@ -519,19 +645,28 @@ function testGeminiAPI() {
       headers: { 'User-Agent': UA }
     }).then(resp => {
       let s = resp.statusCode
-      let body = (resp.body || '').toLowerCase()
+      // Keep the original case for structured Google API fields:
+      // INVALID_ARGUMENT and API_KEY_INVALID are case-sensitive.
+      let body = resp.body || ''
 
-      // 400 也可能是 FAILED_PRECONDITION 地区限制，必须优先检查错误正文
-      if (hasApiRegionBlock(body) && (s === 400 || s === 403 || s === 451)) {
+      // A 400 may be FAILED_PRECONDITION (unsupported region) or an
+      // INVALID_ARGUMENT that isn't about the test API key.
+      if (s === 451) {
+        result.GeminiAPI = "<b>Gemini API: </b>地区/法律限制 (451) 🚫"
+      } else if ((s >= 400 && s <= 403) && hasApiRegionBlock(body)) {
         result.GeminiAPI = "<b>Gemini API: </b>地区受限 🚫"
-      } else if (s === 400 || s === 401) {
+      } else if ((s === 400 || s === 401) && isGeminiInvalidKeyResponse(body, s)) {
         result.GeminiAPI = "<b>Gemini API: </b>接口可达 (无效 Key) ⚠️"
+      } else if (s === 400 || s === 401) {
+        result.GeminiAPI = "<b>Gemini API: </b>状态不明 (" + s + "，未认证) ⚠️"
       } else if (s === 403) {
         result.GeminiAPI = "<b>Gemini API: </b>访问受限 (403) ⚠️"
       } else if (s === 429) {
         result.GeminiAPI = "<b>Gemini API: </b>限流 (未验证) ⚠️"
-      } else if (s === 200) {
+      } else if (s === 200 && hasGeminiModelsResponse(body)) {
         result.GeminiAPI = "<b>Gemini API: </b>接口响应成功 (解锁未证实) ⚠️"
+      } else if (s === 200) {
+        result.GeminiAPI = "<b>Gemini API: </b>响应格式不明 (200) ⚠️"
       } else {
         result.GeminiAPI = "<b>Gemini API: </b>异常 (" + s + ") ❗️"
       }
@@ -574,8 +709,10 @@ function testGoogleCN() {
     let s = resp.statusCode
     let body = (resp.body || '').toLowerCase()
     let loc = getHeader(resp.headers, 'location').toLowerCase()
-    if (loc.indexOf('google.cn') !== -1 ||
-        loc.indexOf('google.com.cn') !== -1) {
+    const redirectHost = redirectHostname(loc, false)
+    // Location is redirect evidence only for an actual HTTP 3xx response.
+    if (s >= 300 && s < 400 && ['google.cn', 'google.com.cn'].some(domain =>
+        redirectHost === domain || redirectHost.endsWith('.' + domain))) {
       result.GoogleCN = "<b>Google 送中: </b>可能 (跳转 Google 中国站) 🇨🇳⚠️"
     } else if (loc.indexOf('hl=zh-cn') !== -1) {
       result.GoogleCN = "<b>Google 送中: </b>无法判定 (语言参数并非地区证据) ⚠️"

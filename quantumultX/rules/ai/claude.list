@@ -1,9 +1,11 @@
 ## Claude / Anthropic
-## version: 0.1.0
-## updated: 2026-09-28
+## version: 0.1.1
+## updated: 2026-10-29
 ## Loaded with force-policy=ClaudeAi服务.
 
-# Core Claude / Anthropic
+# Core Claude / Anthropic: suffixes cover API, OAuth, SSO, downloads,
+# MCP, artifacts and the official application CDN.
+# Shared Datadog telemetry is optional; see claude-telemetry.list.
 HOST-SUFFIX,anthropic.com,ClaudeAi服务
 HOST-SUFFIX,claude.ai,ClaudeAi服务
 HOST-SUFFIX,claude.com,ClaudeAi服务
