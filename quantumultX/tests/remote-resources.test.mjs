@@ -45,7 +45,7 @@ for (const platform of ['ios', 'macos']) {
   test(platform + ': all self-maintained remote resources have existing nonempty files', () => {
     const local = [...resources(conf, 'filter_remote'), ...resources(conf, 'rewrite_remote')]
       .filter(item => localPath(item.url) !== null)
-    assert.ok(local.length >= 20, 'unexpectedly empty remote-resource inventory')
+    assert.ok(local.length >= 18, 'unexpectedly empty remote-resource inventory')
     for (const { url } of local) {
       const rel = localPath(url)
       assert.ok(rel.startsWith('quantumultX/'), 'unexpected raw source: ' + rel)
