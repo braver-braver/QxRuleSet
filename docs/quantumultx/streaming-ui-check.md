@@ -2,6 +2,8 @@
 
 脚本：[`quantumultX/scripts/streaming-ui-check.js`](../../quantumultX/scripts/streaming-ui-check.js)
 
+其他 GEO、节点网络特征和流量诊断说明见 [诊断脚本维护](diagnostics.md)。
+
 ## 类型
 
 Quantumult X `event-interaction` 脚本。

@@ -27,6 +27,7 @@
 - `cn.list`
 - `rules/corrections/direct.list`
 - `streaming-ui-check.js`
+- `geo-location-checker.js`、`geo-query.js`、`node-reputation.js` 和 `traffic-check.js`
 
 这些资源的变化需要经过本仓库审查，避免上游规则突然改变策略优先级。
 
@@ -45,7 +46,7 @@
 - **build 950+**：分流/重写规则允许以 `{# note #}` 携带说明；旧版客户端无法使用该行首语法。现有仓库 ruleset 保持不含这类行首说明。
 - **build 951+**：本地或 iCloud 资源路径后的 `#in=...&out=...` 参数可直接交给解析器；旧版仍需按上游原有的资源首行参数约定。
 - **build 952（1.9.0 测试版）**：客户端新增 `reflected_routes` 等功能；目前不是本仓库的必需功能，不应在稳定模板中默认启用。
-- 其他诊断脚本、广告过滤列表、可选 WeatherKit Rewrite 仍保留各自上游地址。本次没有理由将它们整体 Fork 或替换。
+- GEO / 节点网络特征 / 策略流量诊断已接入本仓库维护脚本；广告过滤列表和可选 WeatherKit Rewrite 仍保留上游。本次没有理由将它们整体 Fork 或替换。
 
 > **版本边界**：`QxRuleSet-Template-Version` 是本仓库的配置模板 CalVer，**不是** Quantumult X App 构建号，也不代表已导入设备的私有 Profile 自动更新。动态引用上游的 URL 不代表客户端缓存已经同步。
 
@@ -114,23 +115,16 @@ NSRingo/WeatherKit/releases/latest/download/iRingo.WeatherKit.snippet
 
 它属于 iOS 18+ optional rewrite，不影响基础分流。启用时需要 MITM，并应评估第三方天气 provider 的位置数据隐私边界。
 
-### 诊断工具
+### 诊断工具：本仓库维护脚本，第三方服务提供数据
 
-`[task_local]` 中的以下资源属于人工触发的诊断工具：
+Quantumult X 的 GEO、节点网络属性、策略流量和服务解锁查询由 `quantumultX/scripts/` 维护：
 
-- 地理位置检测
-- 节点纯净度查询
-- 策略流量查询
+- `ipwho.is`：HTTPS IP 地理与 ASN/ISP，免费接口可能限流，不是完整风控数据库。
+- `IP2Location.io`：免 Key 的 `is_proxy` 仅是综合代理特征，不等于「开放代理」或任何平台的风控结果。
+- `Cloudflare Trace`：GEO 查询的 IP/地区降级数据源，不推测城市或 ASN。
+- `get_traffic_statistics`：使用 QX 配置接口读取流量，不上传订阅/密码。
 
-它们不可用时，不影响：
-
-- 节点订阅
-- DNS
-- filter routing
-- policy groups
-- 基础代理能力
-
-因此继续跟随各自上游。
+诊断失败不影响订阅、DNS、分流或节点选择；详见 [诊断脚本维护](diagnostics.md)。
 
 ### 图标
 
@@ -196,6 +190,6 @@ quantumultX/rules/corrections/direct.list
 
 1. 订阅格式解析器。
 2. 大规模广告/隐私规则库。
-3. 人工触发的诊断脚本。
+3. 与核心分流无关、并且可以单独审计的第三方数据源。
 4. 图标、展示资源。
 5. 需要高频跟踪生态变化、但不改变核心策略边界的数据源。
