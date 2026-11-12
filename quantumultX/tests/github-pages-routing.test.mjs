@@ -59,7 +59,7 @@ for (const platform of ['ios', 'macos']) {
       assert.ok(!localDomainRules.some(r => matches(r, host)),
         'local host rule may shadow inserted Pages rule: ' + host)
     }
-    assert.match(conf, /QxRuleSet-Template-Version: 2026\.11\.04\.1/)
+    assert.match(conf, /QxRuleSet-Template-Version: 2026\.11\.12\.2/)
   })
 }
 

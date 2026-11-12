@@ -8,6 +8,13 @@
 - 地区节点：修改 `server-tag-regex` 后检查大小写修饰符和排除表达式。
 - 脚本：修改后至少做 JavaScript 语法检查。
 
+## 远端规则资源体检
+
+- 修改 iOS/macOS 模板的 `[filter_remote]`、`[rewrite_remote]` 或自维护 `.list` 后，运行 `node --test quantumultX/tests/*.test.mjs`。其中 `remote-resources.test.mjs` 校验远端 URL 指向的本仓库文件存在、内容非空、QX 原生规则类型正确、策略组能解析、外部规则使用正确导入方式。
+- 各平台模板引用的自维护资源必须继续使用 `opt-parser=false` 和本仓库原生 `HOST` 规则。外部上游如使用 `DOMAIN` / `DOMAIN-SUFFIX` / `DOMAIN-KEYWORD`，必须有明确的 `resource_parser_url` 且使用 `opt-parser=true`；不能只看目录名称或 URL 以 `.list` 结尾就假定是 QX 原生格式。
+- 外部链接的真实 HTTP 连接状态、QX 下载日志、运营商网络或 CDN 可达性需要在目标设备验证；本仓库离线 CI **不声称**已证明上游 HTTP 200 或真实规则已加载。
+- 失效前先区分：URL/仓库路径不存在、返回 HTML/反爬错误、格式不兼容、规则加载顺序覆盖、上游规则内容过期和设备缓存未刷新；不要把节点/DNS 故障直接归咎于源文件失效。
+
 ## 可选 Rewrite 的维护约定
 
 - 默认关闭：模板中的 `rewrite_remote` 永远不自动启用新加入的 HTTPS/MITM 规则。

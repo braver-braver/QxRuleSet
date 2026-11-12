@@ -67,23 +67,25 @@ KOP-XIAO/QuantumultX/Scripts/resource-parser.js
 
 如果订阅本身已经是 Quantumult X 原生格式，可以在 `[server_remote]` 中使用 `opt-parser=false`，此时对 parser 的依赖会进一步降低。
 
-### Adblock4limbo
+### Adblock4limbo（2026-11-12 核查）
 
-保留：
-
-```text
-Adblock4limbo.list
-```
-
-作为专业广告过滤数据源。
-
-其 Rewrite：
+上游官方仓库：[`limbopro/Adblock4limbo`](https://github.com/limbopro/Adblock4limbo)。iOS/macOS 统一指向其 GitHub 源码目录，不再使用额外的 `limbopro.com` 文件分发入口：
 
 ```text
-Adblock4limbo.conf
+https://raw.githubusercontent.com/limbopro/Adblock4limbo/main/QuantumultX/rule/Adblock4limbo.list
 ```
 
-在模板中默认 `enabled=false`。
+**关键兼容性约束：`[filter_remote]` 必须配置 `opt-parser=true`。** 即便 upstream 将文件放在 `QuantumultX/rule/` 下，其实际内容仍是 `DOMAIN` / `DOMAIN-SUFFIX` / `DOMAIN-KEYWORD` 规则；本仓库原生 QX 语法是 `HOST` 系列。当前 `KOP-XIAO/QuantumultX` 资源解析器可转换 `DOMAIN*` → `HOST*`，而之前的 `opt-parser=false` 存在直接加载格式不兼容的风险。此处使用自定义 `resource_parser_url`，切勿仅复制远端 URL、遗漏解析器设置。
+
+可选 Rewrite 使用：
+
+```text
+https://raw.githubusercontent.com/limbopro/Adblock4limbo/main/QuantumultX/rewrite/Adblock4limbo.conf
+```
+
+仍保持 `enabled=false, opt-parser=false`，不自动启用 MITM。改动解决**静态导入配置**，不能证明你本机已刷新 QX 缓存或所有广告域名都有效。
+
+其他服务分流仍由本仓库控制，不照搬 Adblock4limbo 的大范围第三方策略；如发生误拦截，请先看 QX 请求命中和远程资源刷新日志。
 
 因此基础分流配置不需要 MITM。只有用户主动开启 Rewrite 后，才需要配置并信任 MITM 证书。
 

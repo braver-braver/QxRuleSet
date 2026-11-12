@@ -11,7 +11,7 @@ async function probe(overrides = {}) {
   const defaults = {
     'api.anthropic.com': { statusCode: 401, body: '{"type":"error","error":{"type":"authentication_error","message":"invalid key"}}' },
     'api.openai.com': { statusCode: 401, body: '{"error":{"code":"invalid_api_key"}}' },
-    'generativelanguage.googleapis.com': { statusCode: 400, body: '{"error":{"status":"INVALID_ARGUMENT","message":"API_KEY_INVALID"}}' },
+    'generativelanguage.googleapis.com': { statusCode: 400, body: "{\"error\":{\"code\":400,\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"API_KEY_INVALID\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"}}]}}" },
     'www.netflix.com': { statusCode: 404, body: '' },
     'www.youtube.com': { statusCode: 200, body: '<html><title>Premium</title></html>' },
     'www.disneyplus.com': { statusCode: 200, body: '<html><title>Disney+</title></html>' },
@@ -404,4 +404,191 @@ test('Claude Web probe must disable automatic HTTP redirects', async () => {
   const claudeWeb = requests.find(req => req.url === 'https://claude.ai')
   assert.ok(claudeWeb)
   assert.equal(claudeWeb.opts.redirection, false)
+})
+
+test('OpenAI API generic 401 or gateway JSON is inconclusive', async () => {
+  for (const body of [
+    '<html><title>Proxy denied</title></html>',
+    '{"error":"authentication_failed"}',
+    '{"error":{"code":"unauthorized","type":"gateway_error"}}',
+    '{"error":{"message":"Invalid credentials"}}'
+  ]) {
+    const out = await probe({ 'api.openai.com': { statusCode: 401, body } })
+    assert.ok(out.includes('OpenAI API: </b>状态不明 (401'), body)
+    assert.ok(!out.includes('OpenAI API: </b>接口可达'), body)
+  }
+})
+
+test('OpenAI API structured invalid_api_key means reachability, not account access', async () => {
+  const out = await probe({
+    'api.openai.com': { statusCode: 401,
+      body: '{"error":{"message":"Incorrect API key provided","type":"invalid_request_error","code":"invalid_api_key"}}' }
+  })
+  assert.ok(out.includes('OpenAI API: </b>接口可达 (未认证)'))
+})
+
+test('OpenAI API explicit region error is not hidden by a 401; 451 is reported', async () => {
+  const denied = await probe({
+    'api.openai.com': { statusCode: 401,
+      body: '{"error":{"message":"Country not supported","type":"invalid_request_error","code":"invalid_api_key"}}' }
+  })
+  assert.ok(denied.includes('OpenAI API: </b>地区受限'), denied)
+  const legal = await probe({ 'api.openai.com': { statusCode: 451, body: '' } })
+  assert.ok(legal.includes('OpenAI API: </b>地区/法律限制 (451)'), legal)
+})
+
+test('Gemini API generic 400/401 or malformed JSON is inconclusive', async () => {
+  for (const statusCode of [400, 401]) {
+    for (const body of [
+      '<html>upstream gateway error</html>',
+      '{"error":"bad request"}',
+      '{"error":{"status":"INVALID_ARGUMENT","message":"missing parameter"}}',
+      '{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID","domain":"evil.example"}]}}'
+    ]) {
+      const out = await probe({
+        'generativelanguage.googleapis.com': { statusCode, body }
+      })
+      assert.ok(out.includes('Gemini API: </b>状态不明 (' + statusCode), body)
+      assert.ok(!out.includes('Gemini API: </b>接口可达'), body)
+    }
+  }
+})
+
+test('Gemini API official API_KEY_INVALID response is reachability only', async () => {
+  const out = await probe({
+    'generativelanguage.googleapis.com': {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: {
+          code: 400, status: 'INVALID_ARGUMENT',
+          message: 'API key not valid. Please pass a valid API key.',
+          details: [{
+            '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+            reason: 'API_KEY_INVALID', domain: 'googleapis.com',
+            metadata: { service: 'generativelanguage.googleapis.com' }
+          }]
+        }
+      })
+    }
+  })
+  assert.ok(out.includes('Gemini API: </b>接口可达 (无效 Key)'), out)
+})
+
+test('Gemini API HTTP 451 is a legal/region block even without body', async () => {
+  const out = await probe({ 'generativelanguage.googleapis.com': { statusCode: 451, body: '' } })
+  assert.ok(out.includes('Gemini API: </b>地区/法律限制 (451)'), out)
+})
+
+test('ChatGPT Web rejects untrusted redirect, blank page, and 200 challenge title', async () => {
+  for (const [statusCode, headers, body, expected] of [
+    [302, { Location: 'https://portal.example/login?next=chatgpt.com' }, '', '跳转未确认'],
+    [302, { Location: 'https://auth.openai.com.evil.example/authorize' }, '', '跳转未确认'],
+    [204, {}, '', '页面状态不明'],
+    [200, {}, '<html><title>Just a moment...</title><body>Checking your browser</body></html>', '验证拦截']
+  ]) {
+    const out = await probe({ 'chatgpt.com': { statusCode, headers, body } })
+    assert.ok(out.includes('ChatGPT: </b>' + expected), statusCode + ': ' + body)
+    assert.ok(!out.includes('ChatGPT: </b>网页可达'), statusCode + ': ' + body)
+  }
+})
+
+test('ChatGPT legitimate first-party login redirects are reachable without proving unlock', async () => {
+  for (const location of ['/login', 'https://auth.openai.com/authorize', 'https://chatgpt.com/auth/login']) {
+    const out = await probe({
+      'chatgpt.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(out.includes('ChatGPT: </b>网页可达 (解锁未证实)'), location)
+  }
+})
+
+test('Gemini Web accepts only real Google login hosts', async () => {
+  for (const location of [
+    'https://accounts.google.com.evil.example/login',
+    'https://login.example/?next=https://accounts.google.com/',
+    'https://gemini.google.com@portal.example/login',
+    'http://accounts.google.com/login'
+  ]) {
+    const out = await probe({
+      'gemini.google.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(out.includes('Gemini: </b>重定向异常'), location)
+    assert.ok(!out.includes('Gemini: </b>登录跳转'), location)
+  }
+  const legitimate = await probe({
+    'gemini.google.com': { statusCode: 302, headers: { Location: 'https://accounts.google.com/signin/v2' }, body: '' }
+  })
+  assert.ok(legitimate.includes('Gemini: </b>登录跳转 (解锁未证实)'))
+})
+
+test('Gemini HTTP 200 challenge title is not a usable page', async () => {
+  const out = await probe({
+    'gemini.google.com': { statusCode: 200, body: '<html><title>Just a moment...</title></html>' }
+  })
+  assert.ok(out.includes('Gemini: </b>验证拦截'), out)
+})
+
+test('Google mainland detection must parse redirect HOST, not its URL parameters', async () => {
+  for (const location of [
+    'https://www.google.com.hk/?next=google.cn',
+    'https://other.example/login?redirect=https://www.google.cn/',
+    'https://www.google.cn.evil.example/',
+    'https://google.cn@other.example/redirect'
+  ]) {
+    const out = await probe({
+      'www.google.com': { statusCode: 302, headers: { Location: location }, body: '' }
+    })
+    assert.ok(!out.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), location)
+  }
+  const real = await probe({
+    'www.google.com': { statusCode: 302, headers: { Location: 'https://www.google.cn/search' }, body: '' }
+  })
+  assert.ok(real.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), real)
+})
+
+test('ChatGPT and Gemini HTML static challenge strings remain harmless', async () => {
+  const out = await probe({
+    'chatgpt.com': { statusCode: 200,
+      body: '<html><title>ChatGPT</title><script>let msg="Just a moment..."</script></html>' },
+    'gemini.google.com': { statusCode: 200,
+      body: '<html><title>Gemini</title><script>let msg="verify you are human"</script></html>' }
+  })
+  assert.ok(out.includes('ChatGPT: </b>网页可达'))
+  assert.ok(out.includes('Gemini: </b>网页可达'))
+})
+
+test('ChatGPT/Gemini web checks explicitly disable automatic redirects', async () => {
+  const { requests } = await probeRuntime()
+  for (const host of ['https://chatgpt.com', 'https://gemini.google.com/app']) {
+    const req = requests.find(r => r.url === host)
+    assert.ok(req, host)
+    assert.equal(req.opts.redirection, false)
+  }
+})
+
+test('Gemini HTTP 200 without the official models response is inconclusive', async () => {
+  const bogus = await probe({
+    'generativelanguage.googleapis.com': { statusCode: 200, body: '<html>Proxy Login</html>' }
+  })
+  assert.ok(bogus.includes('Gemini API: </b>响应格式不明 (200)'), bogus)
+  const official = await probe({
+    'generativelanguage.googleapis.com': {
+      statusCode: 200,
+      body: '{"models":[{"name":"models/gemini-example","version":"001"}]}'
+    }
+  })
+  assert.ok(official.includes('Gemini API: </b>接口响应成功 (解锁未证实)'), official)
+})
+
+test('Google China Location header without an HTTP redirect does not prove mainland routing', async () => {
+  for (const statusCode of [200, 201, 204, 403]) {
+    const out = await probe({
+      'www.google.com': {
+        statusCode,
+        headers: { Location: 'https://www.google.cn/search' },
+        body: statusCode === 200 ? '<html><title>Google</title></html>' : ''
+      }
+    })
+    assert.ok(!out.includes('Google 送中: </b>可能 (跳转 Google 中国站)'), String(statusCode))
+    if (statusCode === 200) assert.ok(out.includes('未观察到大陆跳转'), out)
+  }
 })
