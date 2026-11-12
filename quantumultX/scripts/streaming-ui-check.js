@@ -1,10 +1,10 @@
 /***
- * 服务解锁检测 v3.5.0 (AI + 流媒体 + Google 送中检测)
+ * 服务解锁检测 v3.5.1 (AI + 流媒体 + Google 送中检测)
  *
  * 基于 KOP-XIAO/QuantumultX streaming-ui-check.js 重构维护
  * Thanks to: Hyseen, AtlantisGawrGura, CoiaPrant, Netflixxp
  *
- * 更新: 2026-11-11
+ * 更新: 2026-11-12
  *
  * ★ 重点检测: Claude (Web + API) / ChatGPT (Web + API) / Gemini (Web + API)
  * ★ Google 送中检测: 观察大陆站重定向线索，避免把页面语言误判为出口位置
@@ -176,7 +176,9 @@ function hasExplicitRegionMessage(body) {
     text.indexOf('country not supported') !== -1 ||
     text.indexOf('not available in your country') !== -1 ||
     text.indexOf('not available in your region') !== -1 ||
-    text.indexOf('service is not available in your territory') !== -1
+    text.indexOf('service is not available in your territory') !== -1 ||
+    text.indexOf('not allowed from unsupported countries') !== -1 ||
+    text.indexOf('country, region, or territory not supported') !== -1
 }
 
 function hasApiRegionBlock(body) {
@@ -396,6 +398,28 @@ function isClaudeTrustedRedirect(resp) {
     host === domain || host.endsWith('.' + domain))
 }
 
+// Match the official regional-denial landing page, not a string in page JS
+// or in an unrelated redirect query. This uses the real URL host and path.
+function isClaudeRegionUnavailable(resp, titleText) {
+  if (/^app unavailable in region(?:\b|\s|\|)/i.test(String(titleText || '').trim())) return true
+  const status = Number(resp && resp.statusCode)
+  if ([301, 302, 303, 307, 308].indexOf(status) === -1) return false
+  const location = getHeader(resp && resp.headers, 'location').trim()
+  if (!location) return false
+  let path = ''
+  if (/^\/(?!\/)/.test(location)) {
+    path = location.split(/[?#]/)[0]
+  } else {
+    const found = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)?(?:[?#]|$)/i)
+    if (!found) return false
+    const host = found[1].toLowerCase()
+    if (!['anthropic.com', 'claude.com', 'claude.ai'].some(domain =>
+      host === domain || host.endsWith('.' + domain))) return false
+    path = found[2] || '/'
+  }
+  return /^\/app-unavailable-in-region\/?$/i.test(path)
+}
+
 // ===================== 检测: Claude Web =====================
 
 function testClaude() {
@@ -422,7 +446,7 @@ function testClaude() {
       let redirect = [301, 302, 303, 307, 308].indexOf(s) >= 0
       if (isBotChallenge(resp, body) || challengeTitle) {
         result.Claude = "<b>Claude: </b>验证拦截" + arrow + "⟦" + f + "⟧ ⚠️"
-      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle) {
+      } else if (s === 451 || hasStructuredRegionBlock(body) || deniedTitle || isClaudeRegionUnavailable(resp, title)) {
         result.Claude = "<b>Claude: </b>未支持" + arrow + "⟦" + f + "⟧ 🚫"
       } else if (s === 403 || accessDeniedTitle) {
         result.Claude = "<b>Claude: </b>访问受限 (403) ⚠️"
@@ -481,7 +505,7 @@ function testClaudeAPI() {
       } else if (s === 429 || s === 529) {
         result.ClaudeAPI = "<b>Claude API: </b>限流/繁忙 (未验证) ⚠️"
       } else if (s === 403) {
-        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403) ⚠️"
+        result.ClaudeAPI = "<b>Claude API: </b>访问受限 (403，地区或代理拦截待查) ⚠️"
       } else {
         result.ClaudeAPI = "<b>Claude API: </b>异常 (" + s + ") ❗️"
       }

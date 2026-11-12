@@ -170,3 +170,9 @@ node --test quantumultX/scripts/tests/*.test.mjs
 ```
 
 **限制**：CI 是模拟 Quantumult X `$task.fetch`、策略状态与响应格式的离线测试。它不能替代 iOS/macOS 真机、真实节点出口、账号订阅或实际播放验证。合并后仍需 QX 客户端手动刷新远程脚本缓存。
+
+## 2026-11-12 Claude 地区落地页识别（v3.5.1）
+
+在保留 v3.5.0 的 API 判定和安全跳转验证基础上，补充 Claude 官方不支持地区落地页 `/app-unavailable-in-region` 的识别：仅 HTTP 3xx 指向 Claude/Anthropic 第一方 HTTPS 路径，或真实 HTML `<title>` 为 `App unavailable in region` 才判定「未支持」。不扫描 JavaScript bundle 文案，也不把第三方 URL 查询参数视为地区证据。
+
+同时补充 Anthropic、OpenAI 的明确地区拒绝文本；Claude API 普通 403 仍只标记为「访问受限（地区或代理拦截待查）」。这属于离线响应模拟，不能代表 QX 真机、账号或节点地区许可已验证。

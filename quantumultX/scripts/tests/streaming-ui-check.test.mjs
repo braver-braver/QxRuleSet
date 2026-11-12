@@ -592,3 +592,85 @@ test('Google China Location header without an HTTP redirect does not prove mainl
     if (statusCode === 200) assert.ok(out.includes('未观察到大陆跳转'), out)
   }
 })
+
+// 2026-10-29: Claude 不支持地区会 302 到 app-unavailable-in-region；
+// QX 默认跟随重定向，落地页为 200 且标题 "App unavailable in region"。
+test('Claude region-unavailable landing page (redirect followed) is not reported reachable', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 200,
+      headers: {},
+      body: '<html><head><title>App unavailable in region | Claude by Anthropic</title></head><body>App unavailable</body></html>'
+    }
+  })
+  assert.ok(out.includes('Claude: </b>未支持'))
+  assert.ok(!out.includes('Claude: </b>网页可达'))
+})
+
+test('Claude 302 to app-unavailable-in-region is reported as unsupported', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 302,
+      headers: { Location: 'https://www.anthropic.com/app-unavailable-in-region' },
+      body: ''
+    }
+  })
+  assert.ok(out.includes('Claude: </b>未支持'))
+})
+
+test('Claude region wording inside script bundles is not region evidence', async () => {
+  const out = await probe({
+    'claude.ai': {
+      statusCode: 200,
+      headers: {},
+      body: '<html><head><title>Claude</title></head><script>const m = "App unavailable in region"</script></html>'
+    }
+  })
+  assert.ok(out.includes('Claude: </b>网页可达 (解锁未证实)'))
+})
+
+test('explicit Anthropic/OpenAI unsupported-region wording is recognised on API probes', async () => {
+  const anthropic = await probe({
+    'api.anthropic.com': {
+      statusCode: 400,
+      body: '{"type":"error","error":{"message":"Access to Anthropic models is not allowed from unsupported countries, regions, or territories."}}'
+    }
+  })
+  assert.ok(anthropic.includes('Claude API: </b>地区受限'))
+  const openai = await probe({
+    'api.openai.com': {
+      statusCode: 403,
+      body: '{"error":{"message":"Country, region, or territory not supported"}}'
+    }
+  })
+  assert.ok(openai.includes('OpenAI API: </b>地区受限'))
+})
+
+test('bare Claude API 403 stays indeterminate and is not called a region block', async () => {
+  const out = await probe({
+    'api.anthropic.com': {
+      statusCode: 403,
+      body: '{"error":{"type":"forbidden","message":"Request not allowed"}}'
+    }
+  })
+  assert.ok(out.includes('Claude API: </b>访问受限 (403'))
+  assert.ok(!out.includes('Claude API: </b>地区受限'))
+})
+
+test('Claude region redirect checks first-party host/path, not arbitrary URL text', async () => {
+  for (const location of [
+    'https://portal.example/login?next=/app-unavailable-in-region',
+    'https://anthropic.com.evil.example/app-unavailable-in-region',
+    'https://anthropic.com@portal.example/app-unavailable-in-region',
+    'http://www.anthropic.com/app-unavailable-in-region',
+    'https://www.anthropic.com/?next=/app-unavailable-in-region'
+  ]) {
+    const out = await probe({ 'claude.ai': { statusCode: 302, headers: { Location: location }, body: '' } })
+    assert.ok(!out.includes('Claude: </b>未支持'), location)
+  }
+  const valid = await probe({
+    'claude.ai': { statusCode: 302,
+      headers: { Location: 'https://www.anthropic.com/app-unavailable-in-region?ref=claude' }, body: '' }
+  })
+  assert.ok(valid.includes('Claude: </b>未支持'), valid)
+})
