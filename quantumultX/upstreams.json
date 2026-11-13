@@ -1,0 +1,174 @@
+{
+  "schema": 1,
+  "description": "Curated blackmatrix7 upstreams; domain-only, ownership-gated PR sync; broad Apple/Google/Microsoft are audit-only.",
+  "sources": [
+    {
+      "name": "GitHub",
+      "mode": "sync",
+      "target": "quantumultX/rules/services/github.list",
+      "policy": "GitHub服务",
+      "allowSuffixes": [
+        "github.com",
+        "github.io",
+        "github.dev",
+        "githubusercontent.com",
+        "githubassets.com",
+        "githubapp.com",
+        "github.blog",
+        "github.community",
+        "githubstatus.com",
+        "githubnext.com",
+        "githubpreview.dev",
+        "githubcopilot.com",
+        "ghcr.io",
+        "git.io",
+        "repo.new",
+        "dependabot.com",
+        "npmjs.com",
+        "npmjs.org"
+      ],
+      "minRules": 15,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/GitHub/GitHub.list"
+    },
+    {
+      "name": "BiliBili",
+      "mode": "sync",
+      "target": "quantumultX/rules/services/bilibili.list",
+      "policy": "BiliBili",
+      "allowSuffixes": [
+        "bilibili.com",
+        "bilibili.tv",
+        "bilibili.co",
+        "bilivideo.com",
+        "bilivideo.cn",
+        "biliapi.com",
+        "biliapi.net",
+        "b23.tv",
+        "hdslb.com",
+        "acg.tv",
+        "acgvideo.com",
+        "biligame.com",
+        "biligame.net",
+        "biliintl.co"
+      ],
+      "minRules": 40,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/BiliBili/BiliBili.list"
+    },
+    {
+      "name": "YouTube",
+      "mode": "sync",
+      "target": "quantumultX/rules/services/youtube.list",
+      "policy": "油管服务",
+      "allowSuffixes": [
+        "youtube.com",
+        "youtu.be",
+        "ytimg.com",
+        "googlevideo.com",
+        "withyoutube.com",
+        "youtube-nocookie.com",
+        "youtubeeducation.com",
+        "youtubegaming.com",
+        "youtubekids.com",
+        "yt.be"
+      ],
+      "minRules": 80,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/YouTube/YouTube.list"
+    },
+    {
+      "name": "Spotify",
+      "mode": "sync",
+      "target": "quantumultX/rules/services/spotify.list",
+      "policy": "Spotify",
+      "allowSuffixes": [
+        "spotify.com",
+        "spotifycdn.com",
+        "spotifycdn.net",
+        "spotify-everywhere.com",
+        "spoti.fi",
+        "scdn.co",
+        "pscdn.co",
+        "byspotify.com",
+        "tospotify.com",
+        "spotifycharts.com",
+        "spotifycodes.com",
+        "spotify.design",
+        "spotifyforbrands.com"
+      ],
+      "minRules": 10,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Spotify/Spotify.list"
+    },
+    {
+      "name": "OpenAI",
+      "mode": "sync",
+      "target": "quantumultX/rules/ai/openai.list",
+      "policy": "OpenAi服务",
+      "allowSuffixes": [
+        "openai.com",
+        "chatgpt.com",
+        "oaistatic.com",
+        "oaiusercontent.com",
+        "oaistatsig.com",
+        "openaimerge.com",
+        "chatgpt.livekit.cloud"
+      ],
+      "minRules": 10,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/OpenAI/OpenAI.list"
+    },
+    {
+      "name": "Claude",
+      "mode": "sync",
+      "target": "quantumultX/rules/ai/claude.list",
+      "policy": "ClaudeAi服务",
+      "allowSuffixes": [
+        "anthropic.com",
+        "claude.ai",
+        "claude.com",
+        "clau.de",
+        "claudeusercontent.com",
+        "claudemcpclient.com",
+        "claudemcpcontent.com"
+      ],
+      "minRules": 2,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Claude/Claude.list"
+    },
+    {
+      "name": "Gemini",
+      "mode": "sync",
+      "target": "quantumultX/rules/ai/gemini.list",
+      "policy": "Gemini",
+      "allowSuffixes": [
+        "gemini.google.com",
+        "ai.google.dev",
+        "makersuite.google.com",
+        "generativelanguage.googleapis.com",
+        "generativeai.google",
+        "proactivebackend-pa.googleapis.com",
+        "deepmind.com",
+        "deepmind.google"
+      ],
+      "minRules": 5,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Gemini/Gemini.list"
+    },
+    {
+      "name": "Apple",
+      "mode": "audit",
+      "target": "quantumultX/rules/services/apple.list",
+      "minRules": 500,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Apple/Apple.list"
+    },
+    {
+      "name": "Google",
+      "mode": "audit",
+      "target": "quantumultX/rules/services/google.list",
+      "minRules": 250,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Google/Google.list"
+    },
+    {
+      "name": "Microsoft",
+      "mode": "audit",
+      "target": "quantumultX/rules/services/microsoft.list",
+      "minRules": 250,
+      "url": "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/QuantumultX/Microsoft/Microsoft.list"
+    }
+  ]
+}
