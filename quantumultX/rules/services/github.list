@@ -29,3 +29,7 @@ HOST-SUFFIX,repo.new,GitHub服务
 # npm is operated by GitHub and frequently used together with GitHub development workflows
 HOST-SUFFIX,npmjs.com,GitHub服务
 HOST-SUFFIX,npmjs.org,GitHub服务
+
+# BEGIN QX-UPSTREAM-AUTO blackmatrix7 (do not edit)
+HOST-SUFFIX,dependabot.com,GitHub服务
+# END QX-UPSTREAM-AUTO blackmatrix7

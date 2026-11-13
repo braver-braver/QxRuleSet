@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "sources": {
+    "GitHub": {
+      "sha256": "413f664aa29692e83879422ee6d35ced46dd135ebd85f67afaf554ab14391f77",
+      "mode": "sync",
+      "domainRules": 30,
+      "managed": 1,
+      "blocked": 0
+    },
+    "BiliBili": {
+      "sha256": "fd0f422e30fb78a490adfd23cae3cb02ddc9c85a1a1c46a1e620c2de5b987df6",
+      "mode": "sync",
+      "domainRules": 115,
+      "managed": 0,
+      "blocked": 0
+    },
+    "YouTube": {
+      "sha256": "6c011f1b2d03f664799bd8f01718bef9c8b071209d5602bfed18bb5db4a8c9e4",
+      "mode": "sync",
+      "domainRules": 181,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Spotify": {
+      "sha256": "d29fa087d00317231e7de7c8cd4aa9ca91ed0c51660fbf76101b719d8ac5e78c",
+      "mode": "sync",
+      "domainRules": 26,
+      "managed": 0,
+      "blocked": 0
+    },
+    "OpenAI": {
+      "sha256": "6ec16f5da986a15c62e80192f5b445dcdaf88607987923120761c1388eeb243d",
+      "mode": "sync",
+      "domainRules": 31,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Claude": {
+      "sha256": "bcf41ba79464a16d8305cf1c6f18c69d023ccd33ea1b84834daaa47cc0d5dfea",
+      "mode": "sync",
+      "domainRules": 3,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Gemini": {
+      "sha256": "9e488fd027a55ec5bfeeeda1ab4a9022364c1d47dfd140293e02835d3303980f",
+      "mode": "sync",
+      "domainRules": 10,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Apple": {
+      "sha256": "966cb314803464ea516243104ed97aaa695d44da71f46b4c72bf8a14e7c67931",
+      "mode": "audit",
+      "domainRules": 1814,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Google": {
+      "sha256": "eb56706413fab41ded77194ae73f690af583bd56ad7d470273e026fa5ccb7b93",
+      "mode": "audit",
+      "domainRules": 697,
+      "managed": 0,
+      "blocked": 0
+    },
+    "Microsoft": {
+      "sha256": "7de40c9424a4a1ab793a38f58dbf64c25ef68f9e812618abf3751a853561c800",
+      "mode": "audit",
+      "domainRules": 697,
+      "managed": 0,
+      "blocked": 0
+    }
+  }
+}
