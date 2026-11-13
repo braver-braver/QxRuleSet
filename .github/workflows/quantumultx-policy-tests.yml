@@ -10,6 +10,11 @@ on:
       - 'quantumultX/rules/services/bilibili*.list'
       - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
+      - 'quantumultX/rules/**/*.list'
+      - 'quantumultX/upstreams.json'
+      - 'quantumultX/upstream-state.json'
+      - 'scripts/sync-qx-upstreams.mjs'
+      - '.github/workflows/qx-upstream-sync.yml'
       - '.github/workflows/quantumultx-policy-tests.yml'
   push:
     branches:
@@ -24,6 +29,11 @@ on:
       - 'quantumultX/rules/services/bilibili*.list'
       - 'quantumultX/rules/services/github*.list'
       - 'quantumultX/rules/ai/claude*.list'
+      - 'quantumultX/rules/**/*.list'
+      - 'quantumultX/upstreams.json'
+      - 'quantumultX/upstream-state.json'
+      - 'scripts/sync-qx-upstreams.mjs'
+      - '.github/workflows/qx-upstream-sync.yml'
       - '.github/workflows/quantumultx-policy-tests.yml'
   workflow_dispatch:
 
@@ -37,4 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Quantumult X policy tree and failover defaults
-        run: node --test quantumultX/tests/*.test.mjs
+        run: |
+          node --check scripts/sync-qx-upstreams.mjs
+          node --test quantumultX/tests/*.test.mjs
