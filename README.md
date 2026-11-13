@@ -98,6 +98,7 @@ QxRuleSet/
 - [AI 分流规则集](docs/quantumultx/ai-rules.md)
 - [AI 安全节点筛选](docs/quantumultx/ai-node-sifter.md)
 - [通用服务分流规则集](docs/quantumultx/service-rules.md)
+- [上游规则定时同步（GitHub Actions）](docs/quantumultx/upstream-sync.md)
 - [OpenAI / ChatGPT 分流与更新链路](docs/quantumultx/openai.md)
 - [服务解锁检测脚本](docs/quantumultx/streaming-ui-check.md)
 - [GEO、节点风险线索与策略流量诊断](docs/quantumultx/diagnostics.md)
