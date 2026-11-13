@@ -5,6 +5,14 @@ on:
   # Avoid minute 0; GitHub may delay scheduled workflows.
   schedule:
     - cron: '23 3,15 * * *'
+  # Run a first end-to-end sync when the workflow or manifest lands on main.
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/qx-upstream-sync.yml'
+      - 'quantumultX/upstreams.json'
+      - 'scripts/sync-qx-upstreams.mjs'
   workflow_dispatch:
 
 permissions:
