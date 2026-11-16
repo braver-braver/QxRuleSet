@@ -24,6 +24,8 @@
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 const CONCURRENCY = 3
+// One iOS scan checks three remote providers per candidate: limit fanout.
+const MAX_JOINT_SCAN = 9
 const TIMEOUT = 7000
 const TRACE_TIMEOUT = 4500
 const FAIL_CLOSED = "reject"
@@ -284,6 +286,17 @@ function hasGeminiModelsEnvelope(body) {
   } catch (_) { return false }
 }
 
+function isTrustedOpenAIRedirect(resp) {
+  let location = getHeader(resp && resp.headers, "location").trim()
+  if (!location) return false
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  let match = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!match) return false
+  let host = match[1].toLowerCase()
+  return ["chatgpt.com", "openai.com"].some(domain =>
+    host === domain || host.endsWith("." + domain))
+}
+
 function isTrustedGeminiRedirect(resp) {
   let location = getHeader(resp && resp.headers, "location").trim()
   if (!location) return false
@@ -312,6 +325,11 @@ async function testOpenAI(node, region, strict) {
   let wb = String(web.body || "")
   if (web.statusCode === 451 || hasRegionBlock(wb)) return { status: "fail", reason: "unsupported region", region: region }
   if (isBotChallenge(web, wb) || web.statusCode === 403) return { status: "uncertain", reason: "web challenge/403", region: region }
+  if (strict && web.statusCode !== 200 &&
+      !([301, 302, 303, 307, 308].indexOf(web.statusCode) >= 0 &&
+        isTrustedOpenAIRedirect(web))) {
+    return { status: "uncertain", reason: "ChatGPT web unverified " + web.statusCode, region: region }
+  }
   if (web.statusCode < 200 || web.statusCode >= 400) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
 
   try {
@@ -475,7 +493,7 @@ async function testGemini(node, region, strict) {
     : (loc.indexOf("accounts.google.com") >= 0 ||
        loc.indexOf("gemini.google.com") >= 0 ||
        loc.indexOf("consent.google.com") >= 0)
-  let webOkay = (web.statusCode >= 200 && web.statusCode < 300) ||
+  let webOkay = (strict ? web.statusCode === 200 : (web.statusCode >= 200 && web.statusCode < 300)) ||
     ([301, 302, 307, 308].indexOf(web.statusCode) >= 0 && redirect)
   if (!webOkay) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
 
@@ -794,6 +812,9 @@ async function finish(cfg, action, selected, results, latency, args) {
   if (rememberedResult) excluded[rememberedResult.node] = true
 
   let scanTargets = candidates.filter(x => !excluded[x])
+  // Avoid an unbounded 3-provider HTTP fanout on a battery-powered iPhone.
+  // Unknown/unscanned candidates never become an automatic direct/proxy fallback.
+  if (provider === "all") scanTargets = scanTargets.slice(0, MAX_JOINT_SCAN)
   let results = await mapLimit(scanTargets, CONCURRENCY, node => testNode(provider, node))
   if (rememberedResult) results.unshift(rememberedResult)
   if (currentResult) results.unshift(currentResult)
