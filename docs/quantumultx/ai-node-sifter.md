@@ -6,24 +6,29 @@
 
 普通的 `available` 或 `url-latency-benchmark` 只能判断节点是否可联网、延迟是否合适，不能判断该出口是否真正被 OpenAI、Claude 或 Gemini 接受。
 
-AI 安全节点层额外执行服务级验证。脚本现在支持两种运行模式：iOS/默认仍可使用严格 fail-closed；macOS 模板使用 sticky recovery，优先保持和恢复上一次验证通过的节点，避免睡眠/开盖后的瞬时网络错误把策略误打回 `reject`。
+AI 安全节点层额外执行服务级验证。**iOS 模板从 2026.11.16.2 起使用 `provider=all`：单一 `海外AI` 策略，要求同一节点通过 OpenAI、Claude、Gemini 联合检查，默认严格 fail-closed。** macOS 模板仍独立管理三个 provider，使用 sticky recovery 优先保持和恢复上一次验证通过的节点，避免睡眠/开盖后的瞬时网络错误把策略误打回 `reject`。
 
 > 该机制用于降低误走不受支持出口的风险，不构成任何账号安全或封禁保证。
 
 ## 策略结构
 
+**iOS：**
+
 ```text
-OpenAi服务
-└── 🤖 OpenAI安全节点
-
-ClaudeAi服务
-└── 🧠 Claude安全节点
-
-Gemini
-└── ✨ Gemini安全节点
+openai.list ─┐
+claude.list ─┼─→ 海外AI → 🛡 AI联合安全节点 → 同一节点三重验证
+gemini.list ─┘
 ```
 
-三个内部安全节点池都是 `static` policy，并通过 `server-tag-regex` 从订阅中自动吸收候选节点。
+**macOS（仍独立）：**
+
+```text
+OpenAi服务   → 🤖 OpenAI安全节点
+ClaudeAi服务 → 🧠 Claude安全节点
+Gemini       → ✨ Gemini安全节点
+```
+
+iOS 的一个联合安全池与 macOS 的三个独立安全池均是 `static` policy；都通过 `server-tag-regex` 从订阅自动吸收节点候选。iOS 不复制任何共享 Auth0/Cloudflare/Google 基础设施的宽泛分流规则。
 
 当前候选名称只预筛：
 
@@ -36,17 +41,14 @@ Gemini
 
 ## 首次使用
 
-安全节点池把 `reject` 放在第一位。
+安全节点池把 `reject` 放在第一位。首次导入配置后，AI 请求默认 fail-closed，不会回退到普通的全球代理或直连。
 
-因此第一次导入配置后，OpenAI / Claude / Gemini 默认是 fail-closed 状态。
+添加并更新节点订阅后：
 
-添加并更新节点订阅后，至少手动运行一次：
+- **iOS：**手动运行一次 `海外 AI 联合安全节点`，等待同一候选节点通过全部三项检测；少一项或任何响应不确定都不会自动选中。
+- **macOS：**继续分别运行 `OpenAI 安全节点`、`Claude 安全节点`、`Gemini 安全节点`，保留独立服务的节点选择。
 
-- `OpenAI 安全节点`
-- `Claude 安全节点`
-- `Gemini 安全节点`
-
-脚本选出验证通过的节点之后，对应 AI 流量才会恢复。
+只有对应的安全池选到验证通过的节点后，相关流量才会恢复。
 
 ## 判定流程
 
@@ -216,9 +218,22 @@ mode=sticky
 
 这样既避免把一次开盖重连误当成地区失效，也不会在已经明确判定为不受支持地区时盲目恢复。
 
+## iOS 联合节点的证据门槛
+
+`provider=all` 总是对**同一个节点标签（QX `opts.policy`）**并行执行三组服务端检查，并对出口地区做交叉验证：
+
+- OpenAI 只接受结构化 `invalid_api_key` 401，或包含有效模型 ID 的模型列表响应；普通 401、429、HTML 错页不是通过。
+- Claude 保留既有严格的网页、HTTP 重定向和结构化 Anthropic API 错误验证；地区不支持直接拒绝。
+- Gemini 只接受 Google 官方形状的 `API_KEY_INVALID` / `google.rpc.ErrorInfo`，或真实模型列表；不能把所有 400/401 直接当作接口可达。对登录跳转，还需校验 HTTPS 和第一方域名。
+- 任一服务明确失败则拒绝该共同节点；任一结果不确定、出口地区不一致、云端挑战或超时都不予选中。仅三者均通过且地区一致，才写入联合安全策略。
+
+这是**网络出口可达性的保守检测**，不包含真实 API Key，不能证明账号登录、订阅等级、模型额度或未来不会触发风控。联合验证消耗的 HTTP 请求更多，因此 iOS 默认只在用户手动点击或每天两次定时运行，不再为三家分开安排扫描任务。
+
 ## 自动任务
 
 ### 低频定时复核
+
+iOS 模板每天在 03:15 和 15:15 执行一次 `provider=all` 联合复核（严格 fail-closed）。
 
 macOS 模板每天执行两次：
 
