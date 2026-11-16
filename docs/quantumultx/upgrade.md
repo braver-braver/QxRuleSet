@@ -1,5 +1,40 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-16 iPhone 黑名单分流：默认直连
+
+从 iOS 模板 `2026.11.16.1` 开始，`[filter_local]` 的默认兜底由 `final, proxy` 改为 **`final, direct`**。这表示：只有明确匹配 GitHub、OpenAI、Claude、Gemini、YouTube 等代理服务规则的流量才会走相应策略；没有命中任何规则的国内/普通流量不会因为漏匹配而被全局代理。macOS 模板暂不改变。
+
+```ini
+# 只展示关键配置；其余服务规则仍由 [filter_remote] 维护。
+[filter_local]
+host-suffix, google.cn, direct
+host-suffix, googleapis.cn, direct
+host-suffix, gstatic.cn, direct
+host-suffix, bing.com.cn, direct
+# 其他明确的大陆版 Apple / iCloud 等域名也由 iOS 本地规则直连
+geoip, cn, direct
+final, direct
+```
+
+这些本地例外是为防止 Google、Bing、Apple 通用规则把大陆版域名送到代理节点。没有添加全局 `host-suffix,cn,direct`，因为仍有少量 `.cn` 域名可能需要手动走境外策略。Bilibili 及其视频 CDN 默认直连；原有的 `BiliBili视频` 手动 A/B 出口依旧保留，PCDN 拦截继续关闭。
+
+**QX 必须保持「分流 / filter」运行模式，不是 `all_direct`**：全局直连模式会绕过已配置的海外服务代理规则。此配置也不会改变 `[dns]` 或让已导入的私人 Profile 自动升级。
+
+### 为什么不默认使用「直连失败 → 自动代理」？
+
+Quantumult X 的 `available` / `url-latency-benchmark` 使用 `server_check_url` 检测**代理节点**，不对每个业务域名先尝试直连并在失败时透明重放请求；`fallback_udp_policy` 仅用于代理节点不能转发 UDP 的情形。脚本虽可用 `$task.fetch` 检测指定 URL 并调用 `set_policy_state` 切换静态策略组，但通常只影响**后续连接**：HTTP 403/429/需要登录也可能被误当作「打不开」，而移动网络切换会使判定摇摆、额外耗电。因此默认不部署自动探测和动态改写策略。
+
+对于确实需要代理、却没命中既有海外服务规则的新网站，先查 Quantumult X 请求记录的匹配项，再向个人 `[filter_local]` 添加**具体域名**（例如 `host-suffix, example.org, 全球策略`），不要把兜底改回全局代理，也不要以整个 `.cn` / CDN 顶级域名做代理规则。
+
+### 部署检查
+
+1. 先备份正在使用的 QX 私人 Profile，保留机场订阅和私有节点；在新测试配置中迁移 iOS 模板的 `[filter_local]`，或直接用新版 `qx-ios.conf` 重新建立测试 Profile。
+2. 保持 QX 处于 `filter` 模式，刷新远程分流与资源解析器缓存；确认三个 AI 服务安全池已选到真实可用节点。
+3. 在请求记录中确认 `taobao.com` / `qq.com` / `weixin.com` / `bilibili.com` 及 `google.cn` / `bing.com.cn` 命中 `direct`，而 `github.com` / `youtube.com` / `chatgpt.com` 仍按其专属策略走代理；这些是**客户端验收项**，离线 CI 无法证明真机连通性。
+4. 发现特定网站无法直连时，先确认 DNS、网络环境和实际命中规则，再为该域名单独添加海外例外。
+
+[Quantumult X 官方配置参考](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf)。
+
 ## 2026-10-11 上游变化与本地同步
 
 **上游客户端（不同于本仓库模板）**：
