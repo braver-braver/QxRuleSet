@@ -142,3 +142,25 @@ test('invalid openai models response and Gemini models response remain inconclus
   })
   assert.equal((await context.testNode('all', 'US-01')).status, 'uncertain')
 })
+
+test('untrusted Web redirects and 204 cannot falsely validate the common node', async () => {
+  const cases = [
+    ['chatgpt.com/', { statusCode: 302, headers: { location: 'https://portal.example/login' }, body: '' }],
+    ['chatgpt.com/', { statusCode: 204, body: '' }],
+    ['gemini.google.com/app', { statusCode: 302, headers: { location: 'https://accounts.google.com.evil.example/login' }, body: '' }],
+    ['gemini.google.com/app', { statusCode: 204, body: '' }]
+  ]
+  for (const [key, response] of cases) {
+    const { context } = mockNetwork({ [key]: response })
+    const result = await context.testNode('all', 'US-01')
+    assert.equal(result.status, 'uncertain', key + ' ' + response.statusCode)
+  }
+})
+
+test('trusted first-party HTTPS login redirects remain viable common-node evidence', async () => {
+  const { context } = mockNetwork({
+    'chatgpt.com/': { statusCode: 302, headers: { Location: 'https://auth.openai.com/login' }, body: '' },
+    'gemini.google.com/app': { statusCode: 302, headers: { Location: 'https://accounts.google.com/ServiceLogin' }, body: '' }
+  })
+  assert.equal((await context.testNode('all', 'US-01')).status, 'pass')
+})
