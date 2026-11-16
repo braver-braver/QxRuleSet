@@ -1,7 +1,7 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.2.4
- * updated: 2026-10-29
+ * version: 0.3.0
+ * updated: 2026-11-16
  *
  * Goal:
  * - keep AI traffic on a node that is actually accepted by the provider
@@ -19,6 +19,7 @@
  * event-interaction .../ai-node-sifter.js#provider=openai
  * event-interaction .../ai-node-sifter.js#provider=claude
  * event-interaction .../ai-node-sifter.js#provider=gemini
+ * event-interaction .../ai-node-sifter.js#provider=all (iOS shared AI exit)
  */
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -53,6 +54,11 @@ const PROVIDERS = {
     traceUrl: "https://ipapi.co/json/",
     webUrl: "https://gemini.google.com/app",
     apiUrl: "https://generativelanguage.googleapis.com/v1beta/models?key=AIzaTest00000000000000000000000000"
+  },
+  all: {
+    name: "海外AI",
+    policy: "🛡 AI联合安全节点",
+    preferredRegions: ["US", "GB", "JP", "SG"]
   }
 }
 
@@ -233,7 +239,63 @@ async function getRegion(provider, node) {
   return ""
 }
 
-async function testOpenAI(node, region) {
+// Combined iOS policy must require provider-authored error envelopes rather
+// than treating an arbitrary gateway HTTP 400/401 as "unlocked".
+function isOpenAIInvalidKeyEnvelope(body) {
+  try {
+    let parsed = JSON.parse(String(body || "{}"))
+    return !!parsed && !!parsed.error &&
+      typeof parsed.error === "object" && !Array.isArray(parsed.error) &&
+      parsed.error.code === "invalid_api_key"
+  } catch (_) { return false }
+}
+
+function hasOpenAIModelsEnvelope(body) {
+  try {
+    let parsed = JSON.parse(String(body || "{}"))
+    return !!parsed && Array.isArray(parsed.data) &&
+      parsed.data.some(model => model && typeof model.id === "string" && model.id.length)
+  } catch (_) { return false }
+}
+
+function isGeminiInvalidKeyEnvelope(body, status) {
+  try {
+    let parsed = JSON.parse(String(body || "{}"))
+    let error = parsed && parsed.error
+    if (!error || typeof error !== "object" || Array.isArray(error)) return false
+    if (typeof error.code === "number" && error.code !== status) return false
+    if (status === 400 && error.status !== "INVALID_ARGUMENT") return false
+    if (status === 401 && error.status !== "UNAUTHENTICATED") return false
+    if (status !== 400 && status !== 401) return false
+    if (!Array.isArray(error.details)) return false
+    return error.details.some(detail =>
+      detail && detail["@type"] === "type.googleapis.com/google.rpc.ErrorInfo" &&
+      detail.reason === "API_KEY_INVALID" && detail.domain === "googleapis.com" &&
+      detail.metadata && detail.metadata.service === "generativelanguage.googleapis.com"
+    )
+  } catch (_) { return false }
+}
+
+function hasGeminiModelsEnvelope(body) {
+  try {
+    let parsed = JSON.parse(String(body || "{}"))
+    return !!parsed && Array.isArray(parsed.models) &&
+      parsed.models.some(model => model && typeof model.name === "string" && model.name.length)
+  } catch (_) { return false }
+}
+
+function isTrustedGeminiRedirect(resp) {
+  let location = getHeader(resp && resp.headers, "location").trim()
+  if (!location) return false
+  // QX was sent to the HTTPS gemini.google.com origin.
+  if (/^\/(?!\/)/.test(location) || /^[?#]/.test(location)) return true
+  let match = location.match(/^https:\/\/([a-z0-9.-]+)(?::443)?(?:[\/?#]|$)/i)
+  if (!match) return false
+  return ["accounts.google.com", "consent.google.com", "gemini.google.com"]
+    .indexOf(match[1].toLowerCase()) >= 0
+}
+
+async function testOpenAI(node, region, strict) {
   let cfg = PROVIDERS.openai
   let web
   try {
@@ -260,8 +322,16 @@ async function testOpenAI(node, region) {
       headers: { "Authorization": "Bearer sk-test-00000000", "User-Agent": UA }
     })
     let body = String(api.body || "")
-    if (api.statusCode === 451 || (api.statusCode === 403 && hasRegionBlock(body))) {
+    if (api.statusCode === 451 ||
+        ((api.statusCode === 403 || (strict && api.statusCode >= 400)) && hasRegionBlock(body))) {
       return { status: "fail", reason: "API region blocked", region: region }
+    }
+    if (strict) {
+      if ((api.statusCode === 401 && isOpenAIInvalidKeyEnvelope(body)) ||
+          (api.statusCode === 200 && hasOpenAIModelsEnvelope(body))) {
+        return { status: "pass", reason: "structured OpenAI API response", region: region }
+      }
+      return { status: "uncertain", reason: "OpenAI API unverified " + api.statusCode, region: region }
     }
     if (api.statusCode === 401 || api.statusCode === 429 || api.statusCode === 200) {
       return { status: "pass", reason: "web + API reachable", region: region }
@@ -382,7 +452,7 @@ async function testClaude(node, region) {
   }
 }
 
-async function testGemini(node, region) {
+async function testGemini(node, region, strict) {
   let cfg = PROVIDERS.gemini
   let web
   try {
@@ -400,9 +470,13 @@ async function testGemini(node, region) {
   let loc = getHeader(web.headers, "location").toLowerCase()
   if (web.statusCode === 451 || hasRegionBlock(wb)) return { status: "fail", reason: "unsupported region", region: region }
   if (web.statusCode === 403) return { status: "uncertain", reason: "web 403", region: region }
+  let redirect = strict
+    ? isTrustedGeminiRedirect(web)
+    : (loc.indexOf("accounts.google.com") >= 0 ||
+       loc.indexOf("gemini.google.com") >= 0 ||
+       loc.indexOf("consent.google.com") >= 0)
   let webOkay = (web.statusCode >= 200 && web.statusCode < 300) ||
-    ([301, 302, 307, 308].indexOf(web.statusCode) >= 0 &&
-      (loc.indexOf("accounts.google.com") >= 0 || loc.indexOf("gemini.google.com") >= 0 || loc.indexOf("consent.google.com") >= 0))
+    ([301, 302, 307, 308].indexOf(web.statusCode) >= 0 && redirect)
   if (!webOkay) return { status: "uncertain", reason: "web " + web.statusCode, region: region }
 
   try {
@@ -413,8 +487,17 @@ async function testGemini(node, region) {
       headers: { "User-Agent": UA }
     })
     let body = String(api.body || "")
-    if (api.statusCode === 451 || (api.statusCode === 403 && hasRegionBlock(body))) {
+    if (api.statusCode === 451 ||
+        ((api.statusCode === 403 || (strict && api.statusCode >= 400)) && hasRegionBlock(body))) {
       return { status: "fail", reason: "API region blocked", region: region }
+    }
+    if (strict) {
+      if (((api.statusCode === 400 || api.statusCode === 401) &&
+           isGeminiInvalidKeyEnvelope(body, api.statusCode)) ||
+          (api.statusCode === 200 && hasGeminiModelsEnvelope(body))) {
+        return { status: "pass", reason: "structured Gemini API response", region: region }
+      }
+      return { status: "uncertain", reason: "Gemini API unverified " + api.statusCode, region: region }
     }
     if ([200, 400, 401].indexOf(api.statusCode) >= 0) {
       return { status: "pass", reason: "web + API reachable", region: region }
@@ -426,7 +509,33 @@ async function testGemini(node, region) {
   }
 }
 
-async function testNode(provider, node) {
+async function testNode(provider, node, strict) {
+  if (provider === "all") {
+    // Verify the *same actual policy node* with each provider. Do not infer
+    // joint support from the country label or an ordinary latency benchmark.
+    let names = ["openai", "claude", "gemini"]
+    let results = await Promise.all(names.map(name => testNode(name, node, true)))
+    let failIndex = results.findIndex(result => result.status === "fail")
+    if (failIndex >= 0) {
+      return { node: node, status: "fail",
+        reason: names[failIndex] + ": " + results[failIndex].reason,
+        region: results[failIndex].region || "" }
+    }
+    let uncertainIndex = results.findIndex(result => result.status !== "pass")
+    if (uncertainIndex >= 0) {
+      return { node: node, status: "uncertain",
+        reason: names[uncertainIndex] + ": " + results[uncertainIndex].reason,
+        region: results[uncertainIndex].region || "" }
+    }
+    let commonRegion = results[0].region
+    if (!commonRegion || results.some(result => result.region !== commonRegion)) {
+      return { node: node, status: "uncertain",
+        reason: "AI provider exit regions disagree", region: "" }
+    }
+    return { node: node, status: "pass",
+      reason: "OpenAI + Claude + Gemini verified (reachability only)",
+      region: commonRegion }
+  }
   let cfg = PROVIDERS[provider]
   let region = await getRegion(provider, node)
   if (!region) return { node: node, status: "uncertain", reason: "exit region unknown", region: "" }
@@ -435,9 +544,9 @@ async function testNode(provider, node) {
   }
 
   let r
-  if (provider === "openai") r = await testOpenAI(node, region)
+  if (provider === "openai") r = await testOpenAI(node, region, strict)
   else if (provider === "claude") r = await testClaude(node, region)
-  else r = await testGemini(node, region)
+  else r = await testGemini(node, region, strict)
 
   r.node = node
   return r
