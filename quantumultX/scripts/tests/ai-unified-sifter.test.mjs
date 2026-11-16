@@ -48,7 +48,7 @@ function mockNetwork(overrides = {}) {
       fetch(req) {
         calls.push(req)
         const key = Object.keys(defaultResponses).find(candidate =>
-          req.url.startsWith('https://' + candidate))
+          new URL(req.url).href.startsWith('https://' + candidate))
         assert.ok(key, 'unexpected URL: ' + req.url)
         return Promise.resolve(overrides[key] ?? defaultResponses[key])
       }
