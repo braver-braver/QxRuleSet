@@ -164,3 +164,61 @@ test('trusted first-party HTTPS login redirects remain viable common-node eviden
   })
   assert.equal((await context.testNode('all', 'US-01')).status, 'pass')
 })
+
+async function runFullSifter(overrides = {}) {
+  const mock = mockNetwork(overrides)
+  const actions = []
+  const responses = []
+  const context = {
+    $environment: {
+      sourcePath: 'https://example.test/ai-node-sifter.js#provider=all',
+      params: '', executeType: '1'
+    },
+    $task: mock.context.$task,
+    $prefs: { valueForKey: () => '', setValueForKey: () => true },
+    $configuration: {
+      async sendMessage(message) {
+        actions.push(message)
+        if (message.action === 'get_customized_policy') {
+          return { ret: { '🛡 AI联合安全节点': { candidates: ['reject', 'US-01'] } } }
+        }
+        if (message.action === 'get_policy_state') {
+          return { ret: { '🛡 AI联合安全节点': ['reject'] } }
+        }
+        if (message.action === 'url_latency_benchmark') {
+          return { ret: { 'US-01': [true, 35] } }
+        }
+        if (message.action === 'set_policy_state') return { ret: {} }
+        throw new Error('unexpected QX config action: ' + message.action)
+      }
+    },
+    $done(value) { responses.push(value) },
+    $notify() { throw new Error('manual task should not notify') },
+    setTimeout, clearTimeout
+  }
+  await runInNewContext(script, context, { timeout: 2000 })
+  return { actions, responses, calls: mock.calls }
+}
+
+test('full provider=all task selects only the jointly verified leaf policy', async () => {
+  const out = await runFullSifter()
+  const writes = out.actions.filter(a => a.action === 'set_policy_state')
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].content['🛡 AI联合安全节点'], 'US-01')
+  assert.equal(out.responses.length, 1)
+  assert.match(out.responses[0].title, /海外AI/)
+  assert.ok(out.calls.every(c => c.opts?.policy === 'US-01'))
+})
+
+test('full provider=all task fails closed when any one provider is unverified', async () => {
+  const out = await runFullSifter({
+    'generativelanguage.googleapis.com/v1beta/models': {
+      statusCode: 400, body: '{"error":"Gateway Bad Request"}'
+    }
+  })
+  const writes = out.actions.filter(a => a.action === 'set_policy_state')
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].content['🛡 AI联合安全节点'], 'reject')
+  assert.equal(out.responses.length, 1)
+  assert.match(out.responses[0].htmlMessage, /reject/)
+})
