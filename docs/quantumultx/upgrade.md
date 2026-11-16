@@ -1,5 +1,29 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-16 iOS 海外 AI 单策略（模板 2026.11.16.2）
+
+从本版本起，iOS 采用独立于 macOS 的联合 AI 配置：
+
+```ini
+[policy]
+static=海外AI, 🛡 AI联合安全节点, reject
+# 🛡 AI联合安全节点的定义和 server-tag-regex 详见 qx-ios.conf
+
+[filter_remote]
+# openai.list、claude.list、gemini.list 的 force-policy 统一为「海外AI」
+
+[task_local]
+# 只保留一个 ai-node-sifter.js#provider=all 手动任务和一个定时复核
+```
+
+三个源规则文件依旧独立更新；只是 iOS 日常出口统一到一个策略组。安全脚本必须对**同一节点**分别验证 OpenAI、Claude 和 Gemini，普通 400/401/429 或网关 HTML 不能视为成功，任何一项失败或不确定都不会自动选择为联合出口。macOS 的三个独立安全池及 sticky/network 恢复任务保持不变。
+
+**迁移旧私人 Profile 时不能只修改 `force-policy`**：还需从新版 iOS 模板复制 `海外AI` 和 `🛡 AI联合安全节点` 两个策略定义，替换旧三个 provider 的任务为单一 `#provider=all`，并更新远端脚本；否则规则会引用不存在的策略组。先备份原 Profile，再启动新模板做验收。
+
+首次导入时联合安全池默认为 `reject`。订阅节点更新后，在 QX 中手动运行一次「海外 AI 联合安全节点」，确认三个服务均验证通过，再打开 ChatGPT/Claude/Gemini 验证实际请求出口。iOS 仍采用 `final, direct` 黑名单式分流；只有显式命中的海外 AI 域名使用 `海外AI`。
+
+详见 [AI 安全节点筛选](ai-node-sifter.md)。
+
 ## 2026-11-16 iPhone 黑名单分流：默认直连
 
 从 iOS 模板 `2026.11.16.1` 开始，`[filter_local]` 的默认兜底由 `final, proxy` 改为 **`final, direct`**。这表示：只有明确匹配 GitHub、OpenAI、Claude、Gemini、YouTube 等代理服务规则的流量才会走相应策略；没有命中任何规则的国内/普通流量不会因为漏匹配而被全局代理。macOS 模板暂不改变。
@@ -29,7 +53,7 @@ Quantumult X 的 `available` / `url-latency-benchmark` 使用 `server_check_url`
 ### 部署检查
 
 1. 先备份正在使用的 QX 私人 Profile，保留机场订阅和私有节点；在新测试配置中迁移 iOS 模板的 `[filter_local]`，或直接用新版 `qx-ios.conf` 重新建立测试 Profile。
-2. 保持 QX 处于 `filter` 模式，刷新远程分流与资源解析器缓存；确认三个 AI 服务安全池已选到真实可用节点。
+2. 保持 QX 处于 `filter` 模式，刷新远程分流与资源解析器缓存；确认 `海外AI` 联合安全池已选到经过三家检查的同一节点。
 3. 在请求记录中确认 `taobao.com` / `qq.com` / `weixin.com` / `bilibili.com` 及 `google.cn` / `bing.com.cn` 命中 `direct`，而 `github.com` / `youtube.com` / `chatgpt.com` 仍按其专属策略走代理；这些是**客户端验收项**，离线 CI 无法证明真机连通性。
 4. 发现特定网站无法直连时，先确认 DNS、网络环境和实际命中规则，再为该域名单独添加海外例外。
 
