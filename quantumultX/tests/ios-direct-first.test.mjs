@@ -62,9 +62,9 @@ test('blacklist still routes explicit overseas services via their policy groups'
   const required = new Map([
     ['github-pages.list', 'GitHub服务'],
     ['github.list', 'GitHub服务'],
-    ['openai.list', 'OpenAi服务'],
-    ['claude.list', 'ClaudeAi服务'],
-    ['gemini.list', 'Gemini'],
+    ['openai.list', '海外AI'],
+    ['claude.list', '海外AI'],
+    ['gemini.list', '海外AI'],
     ['youtube.list', '油管服务'],
     ['social.list', '社交媒体'],
     ['bilibili-video.list', 'BiliBili视频']
