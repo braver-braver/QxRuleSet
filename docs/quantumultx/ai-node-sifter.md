@@ -26,22 +26,18 @@ gemini.list ─┘
 openai.list → OpenAi服务 → 🤖 OpenAI安全节点
 claude.list → ClaudeAi服务 → 🧠 Claude安全节点
 gemini.list → Gemini → ✨ Gemini安全节点
-```text
-openai.list ─┐
-claude.list ─┼─→ 海外AI → 🛡 AI联合安全节点 → 同一节点三重验证
-gemini.list ─┘                              ↳ last-known-good / event-network
 ```
 
 iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 US / GB / JP / SG / TW。macOS 仅人工选择节点，不保证候选节点已通过服务验证。`AI应用更新` 保留独立策略。
 
-当前候选名称只预筛：
+筛选脚本当前候选名称只预筛（与 macOS 手选候选池不同）：
 
 - US / United States
 - GB / UK / United Kingdom
 - JP / Japan
 - SG / Singapore
 
-节点名称只用于第一层缩小候选范围；最终判定依赖实际出口地区和服务端响应。
+节点名称只用于第一层缩小候选范围；iOS 的最终判定依赖实际出口地区和服务端响应。macOS 用户需自行确认所选节点是否适用于对应服务。
 
 ## 首次使用
 
@@ -52,7 +48,7 @@ iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 
 - **iOS：**手动运行一次 `海外 AI 联合安全节点`，等待同一候选节点通过全部三项检测；少一项或任何响应不确定都不会自动选中。
 - **macOS：**在 OpenAI、Claude、Gemini 三个策略中分别人工选择一个真实节点。四个诊断工具只查询，不负责设置节点；无定时或网络自动 AI 任务。
 
-只有对应的安全池选到验证通过的节点后，相关流量才会恢复。
+iOS 只有联合安全池验证通过才会恢复流量；macOS 则需要手动选中真实节点，不能保持 `reject`。
 
 ## 判定流程
 
@@ -159,7 +155,7 @@ region
 verifiedAt
 ```
 
-该状态在 Quantumult X 运行期间持久保存，可用于 macOS 睡眠/开盖或配置状态重载后的自动恢复。
+该状态在 Quantumult X 运行期间持久保存，供仍使用筛选脚本的旧版配置或 iOS 逻辑参考。新版 macOS 模板不依赖该状态。
 
 ## 两种恢复模式
 
