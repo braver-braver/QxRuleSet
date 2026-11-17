@@ -77,16 +77,17 @@ test('one iOS AI policy is used for all 3 first-party rules, with direct-first f
   assert.match(ios, /^final, direct$/m)
 })
 
-test('macOS retains original independent AI policies, tasks and routing', () => {
-  for (const name of ['OpenAi服务', 'ClaudeAi服务', 'Gemini']) {
-    assert.ok(mac.includes('static=' + name + ','))
+test('macOS uses separate manual-only AI policies without changing iOS joint verification', () => {
+  for (const [provider, policy, pool] of [
+    ['openai', 'OpenAi服务', '🤖 OpenAI安全节点'],
+    ['claude', 'ClaudeAi服务', '🧠 Claude安全节点'],
+    ['gemini', 'Gemini', '✨ Gemini安全节点']
+  ]) {
+    assert.ok(mac.includes('static=' + policy + ', ' + pool + ', reject,'))
+    const row = mac.split('\n').find(s => s.includes('/rules/ai/' + provider + '.list,'))
+    assert.ok(row && row.includes('force-policy=' + policy), provider)
   }
-  for (const name of ['openai', 'claude', 'gemini']) {
-    assert.match(mac, new RegExp('ai-node-sifter\\.js#provider=' + name + '&mode=sticky'))
-    const row = mac.split('\n').find(s => s.includes('/rules/ai/' + name + '.list,'))
-    assert.ok(row && !row.includes('force-policy=海外AI'), name)
-  }
-  assert.ok(!mac.includes('static=海外AI,'))
+  assert.doesNotMatch(mac, /ai-node-sifter\.js#/)
   assert.match(mac, /^final, proxy$/m)
 })
 
@@ -210,15 +211,15 @@ test('full provider=all task selects only the jointly verified leaf policy', asy
   assert.ok(out.calls.every(c => c.opts?.policy === 'US-01'))
 })
 
-test('full provider=all task fails closed when any one provider is unverified', async () => {
+test('full provider=all task stays fail-closed when a provider is unverified', async () => {
   const out = await runFullSifter({
     'generativelanguage.googleapis.com/v1beta/models': {
       statusCode: 400, body: '{"error":"Gateway Bad Request"}'
     }
   })
   const writes = out.actions.filter(a => a.action === 'set_policy_state')
-  assert.equal(writes.length, 1)
-  assert.equal(writes[0].content['🛡 AI联合安全节点'], 'reject')
+  // The mock starts on reject. Keeping reject must not cause a redundant write.
+  assert.equal(writes.length, 0)
   assert.equal(out.responses.length, 1)
   assert.match(out.responses[0].htmlMessage, /reject/)
 })

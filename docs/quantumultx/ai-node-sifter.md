@@ -6,7 +6,7 @@
 
 普通的 `available` 或 `url-latency-benchmark` 只能判断节点是否可联网、延迟是否合适，不能判断该出口是否真正被 OpenAI、Claude 或 Gemini 接受。
 
-AI 安全节点层额外执行服务级验证。**iOS 模板从 2026.11.16.2 起使用 `provider=all`：单一 `海外AI` 策略，要求同一节点通过 OpenAI、Claude、Gemini 联合检查，默认严格 fail-closed。** macOS 模板仍独立管理三个 provider，使用 sticky recovery 优先保持和恢复上一次验证通过的节点，避免睡眠/开盖后的瞬时网络错误把策略误打回 `reject`。
+AI 安全节点脚本提供服务级验证。**iOS 仍使用 `provider=all` 的联合 AI 策略及自动复核；macOS 自 2026.11.17.2 起使用三个独立手动固定出口，不再自动调用本脚本。**
 
 > 该机制用于降低误走不受支持出口的风险，不构成任何账号安全或封禁保证。
 
@@ -20,24 +20,24 @@ claude.list ─┼─→ 海外AI → 🛡 AI联合安全节点 → 同一节点
 gemini.list ─┘
 ```
 
-**macOS（仍独立）：**
+**macOS（独立手动固定出口，不触发筛选脚本）：**
 
 ```text
-OpenAi服务   → 🤖 OpenAI安全节点
-ClaudeAi服务 → 🧠 Claude安全节点
-Gemini       → ✨ Gemini安全节点
+openai.list → OpenAi服务 → 🤖 OpenAI安全节点
+claude.list → ClaudeAi服务 → 🧠 Claude安全节点
+gemini.list → Gemini → ✨ Gemini安全节点
 ```
 
-iOS 的一个联合安全池与 macOS 的三个独立安全池均是 `static` policy；都通过 `server-tag-regex` 从订阅自动吸收节点候选。iOS 不复制任何共享 Auth0/Cloudflare/Google 基础设施的宽泛分流规则。
+iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 US / GB / JP / SG / TW。macOS 仅人工选择节点，不保证候选节点已通过服务验证。`AI应用更新` 保留独立策略。
 
-当前候选名称只预筛：
+筛选脚本当前候选名称只预筛（与 macOS 手选候选池不同）：
 
 - US / United States
 - GB / UK / United Kingdom
 - JP / Japan
 - SG / Singapore
 
-节点名称只用于第一层缩小候选范围；最终判定依赖实际出口地区和服务端响应。
+节点名称只用于第一层缩小候选范围；iOS 的最终判定依赖实际出口地区和服务端响应。macOS 用户需自行确认所选节点是否适用于对应服务。
 
 ## 首次使用
 
@@ -46,9 +46,9 @@ iOS 的一个联合安全池与 macOS 的三个独立安全池均是 `static` po
 添加并更新节点订阅后：
 
 - **iOS：**手动运行一次 `海外 AI 联合安全节点`，等待同一候选节点通过全部三项检测；少一项或任何响应不确定都不会自动选中。
-- **macOS：**继续分别运行 `OpenAI 安全节点`、`Claude 安全节点`、`Gemini 安全节点`，保留独立服务的节点选择。
+- **macOS：**在 OpenAI、Claude、Gemini 三个策略中分别人工选择一个真实节点。四个诊断工具只查询，不负责设置节点；无定时或网络自动 AI 任务。
 
-只有对应的安全池选到验证通过的节点后，相关流量才会恢复。
+iOS 只有联合安全池验证通过才会恢复流量；macOS 则需要手动选中真实节点，不能保持 `reject`。
 
 ## 判定流程
 
@@ -155,7 +155,7 @@ region
 verifiedAt
 ```
 
-该状态在 Quantumult X 运行期间持久保存，可用于 macOS 睡眠/开盖或配置状态重载后的自动恢复。
+该状态在 Quantumult X 运行期间持久保存，供仍使用筛选脚本的旧版配置或 iOS 逻辑参考。新版 macOS 模板不依赖该状态。
 
 ## 两种恢复模式
 
@@ -171,54 +171,29 @@ verifiedAt
 
 该模式仍适用于希望“任何无法确认都立即阻断”的场景。
 
-### sticky recovery（macOS 默认）
+### sticky recovery（兼容历史私人配置；新版 macOS 模板不调用）
 
-macOS 模板给脚本传入：
-
-```text
-mode=sticky
-```
-
-行为改为：
+旧版 macOS / 私人配置可能传入 `provider=all&mode=sticky`：
 
 ```text
-当前 PASS
-  → 保持当前节点
-  → 更新 last-known-good
+当前联合节点 PASS
+  → 保持原节点，更新 last-known-good
 
-当前 UNCERTAIN
-  → 不切 reject
-  → 保留当前节点
-  → 弹出通知
+当前联合节点 UNCERTAIN
+  → 只有曾通过三重验证的同一节点才暂时保留并通知
+  → 从未验证的手选节点先切 reject，继续查找其他候选
 
-当前明确 FAIL
-  → 扫描其他候选
-  → 有 PASS：切换到验证通过节点
-  → 无 PASS：保留原节点并通知
+当前联合节点明确 FAIL（例如任一家地区拒绝）
+  → 先切 reject，检测其他候选
+  → 有三重 PASS：恢复可用的联合节点
+  → 无三重 PASS：保持 reject
 ```
 
-`UNCERTAIN` 包括刚恢复网络时常见的：
+如果配置重载后当前为 `reject`，可以使用 `last-known-good` 复测；**只有新的联合检测为 PASS 才恢复**，UNCERTAIN 与 FAIL 均不能从 reject 恢复该出口。无候选节点时同样保持 reject。
 
-- DNS 尚未稳定；
-- timeout；
-- Cloudflare challenge；
-- 临时 403；
-- 暂时无法识别出口地区。
+脚本仍兼容 `provider=openai/claude/gemini` 和 `provider=all` 的历史配置；新版 macOS 模板均不调用这些入口。
 
-因此这类瞬时状态不会再破坏原来的策略选择。
-
-如果 Quantumult X 在重新联网/策略重载后已经把安全组落到 `reject`：
-
-1. 读取持久化的 `last-known-good`；
-2. 直接指定该节点做服务级复测；
-3. `PASS`：自动恢复它；
-4. `UNCERTAIN`：仍恢复上次节点，但通知“本次无法重新确认”；
-5. 明确 `FAIL`：不恢复已知失败出口，扫描其他候选；
-6. 仍没有可用候选：保持当前 `reject` 并通知。
-
-这样既避免把一次开盖重连误当成地区失效，也不会在已经明确判定为不受支持地区时盲目恢复。
-
-## iOS 联合节点的证据门槛
+## iOS/macOS 联合节点的证据门槛
 
 `provider=all` 总是对**同一个节点标签（QX `opts.policy`）**并行执行三组服务端检查，并对出口地区做交叉验证：
 
@@ -227,7 +202,7 @@ mode=sticky
 - Gemini 只接受 Google 官方形状的 `API_KEY_INVALID` / `google.rpc.ErrorInfo`，或真实模型列表；不能把所有 400/401 直接当作接口可达。对登录跳转，还需校验 HTTPS 和第一方域名。
 - 任一服务明确失败则拒绝该共同节点；任一结果不确定、出口地区不一致、云端挑战或超时都不予选中。仅三者均通过且地区一致，才写入联合安全策略。
 
-这是**网络出口可达性的保守检测**，不包含真实 API Key，不能证明账号登录、订阅等级、模型额度或未来不会触发风控。联合验证消耗的 HTTP 请求更多，因此 iOS 默认只在用户手动点击或每天两次定时运行，不再为三家分开安排扫描任务。单轮最多扫描 **9 个新候选节点**（已选节点或历史节点按原有逻辑单独验证），防止大量机场节点导致移动端任务长期占用网络；超过此数量的候选本轮不扫描，不应被当作验证通过。
+这是**网络出口可达性的保守检测**，不包含真实 API Key，不能证明账号登录、订阅等级、模型额度或未来不会触发风控。联合验证消耗的 HTTP 请求较多，因此 iOS 安排一个手动任务及每天两次复核；macOS 不安排 AI 筛选任务。单轮最多扫描 **9 个新候选节点**（当前与历史节点按原有逻辑单独复测），避免大量机场节点造成请求风暴；超出数量的节点本轮不扫描，也不会自动认定为安全。
 
 ## 自动任务
 
@@ -235,43 +210,11 @@ mode=sticky
 
 iOS 模板每天在 03:15 和 15:15 执行一次 `provider=all` 联合复核（严格 fail-closed）。
 
-macOS 模板每天执行两次：
-
-```text
-03:15 / 15:15  OpenAI
-03:25 / 15:25  Claude
-03:35 / 15:35  Gemini
-```
-
-均使用 `mode=sticky`。
+macOS 模板不再定时复核 AI 节点。
 
 ### 网络变化复核
 
-Quantumult X 官方支持：
-
-```text
-event-network
-```
-
-网络变化时会触发任务。macOS 模板利用它处理开盖、Wi-Fi 重连和网络切换：
-
-```text
-网络变化
-  ↓
-OpenAI 等待 4 秒
-Claude 等待 7 秒
-Gemini 等待 10 秒
-  ↓
-复测当前/last-known-good
-  ↓
-PASS → 静默保持/恢复
-UNCERTAIN → 保留并通知
-FAIL → 扫描替代节点
-```
-
-三个 provider 错峰执行，避免刚恢复网络时同时发起大量探测。
-
-脚本以**最后一次**网络变化为准：每次事件都会更新同一 provider 的事件令牌；旧任务在等待结束后发现令牌已过期就退出。只有最新事件对应的任务会在 4 / 7 / 10 秒稳定期结束后复核，且过期任务不得修改策略或发送通知。
+新版 macOS 模板不再注册 `event-network` AI 复核任务。以下联合脚本的恢复逻辑仅供使用它的旧配置或其他终端参考。
 
 ## Quantumult X API
 

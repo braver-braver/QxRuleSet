@@ -1,5 +1,14 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-17 macOS 独立 AI 固定出口及 Homebrew 分流（2026.11.17.2）
+
+macOS 恢复 OpenAI、Claude、Gemini 三个独立手动固定出口，候选地区 US / GB / JP / SG / TW。只保留四项手动诊断任务，不运行 AI 筛选脚本、定时复核或网络变化复核；休眠恢复不会主动修改 AI 选定节点。iOS 联合 `海外AI` 不变。
+
+Homebrew 的 `formulae.brew.sh` 单独由 `Homebrew服务` 处理，默认直连，必要时人工改新加坡/美国；macOS 继续使用 `final, proxy`。国内 Google/Bing/Apple/iCloud 例外保持直连。
+
+迁移时请同步更新三个父策略、三个候选池、三条 `force-policy`，删除旧的联合组与自动任务，并检查全部策略引用。见 [macOS 分流指南](macos-routing.md)。
+
+
 ## 2026-11-16 iOS 海外 AI 单策略（模板 2026.11.16.2）
 
 从本版本起，iOS 采用独立于 macOS 的联合 AI 配置：
@@ -16,7 +25,7 @@ static=海外AI, 🛡 AI联合安全节点, reject
 # 只保留一个 ai-node-sifter.js#provider=all 手动任务和一个定时复核
 ```
 
-三个源规则文件依旧独立更新；只是 iOS 日常出口统一到一个策略组。安全脚本必须对**同一节点**分别验证 OpenAI、Claude 和 Gemini，普通 400/401/429 或网关 HTML 不能视为成功，任何一项失败或不确定都不会自动选择为联合出口。macOS 的三个独立安全池及 sticky/network 恢复任务保持不变。
+三个源规则文件依旧独立更新；只是 iOS 日常出口统一到一个策略组。安全脚本必须对**同一节点**分别验证 OpenAI、Claude 和 Gemini，普通 400/401/429 或网关 HTML 不能视为成功，任何一项失败或不确定都不会自动选择为联合出口。**macOS 的 2026.11.17.2 模板恢复三个独立手动出口，见本页上方章节。**
 
 **迁移旧私人 Profile 时不能只修改 `force-policy`**：还需从新版 iOS 模板复制 `海外AI` 和 `🛡 AI联合安全节点` 两个策略定义，替换旧三个 provider 的任务为单一 `#provider=all`，并更新远端脚本；否则规则会引用不存在的策略组。先备份原 Profile，再启动新模板做验收。
 
@@ -129,7 +138,9 @@ grep -E '^# QxRuleSet-Template-(Version|Updated-At|Platform):' quantumultX/quant
 | 没有 `rules/services/media.list` | 国际媒体分流未启用 |
 | 文件开头有 `QxRuleSet-Template-Version` | 可直接用版本号定位后续维护变更 |
 
-## 只修复 macOS 开盖后 AI 落回 reject
+## 历史方案：只修复旧 macOS 配置开盖后 AI 落回 reject
+
+> 下方仅供旧 Profile 参考，新版 2026.11.17.2 不再使用自动筛选任务。
 
 **适用前提**：你的本地配置已经包含下面全部定义：
 
@@ -154,7 +165,9 @@ event-network https://raw.githubusercontent.com/braver-braver/QxRuleSet/refs/hea
 
 遇到明确不受支持的出口或所有候选均不可用时，可能仍无法恢复可用节点；`sticky` 只避免**瞬时不确定状态**误导致策略重置，不保证自动解锁。
 
-## 如果你的版本是约 2026-09-24 的 macOS 配置
+## 历史迁移：约 2026-09-24 的 macOS 配置
+
+> 此节保留旧版背景；升级到 2026.11.17.2 请以本页首节和 macOS 分流指南为准。
 
 **不能仅粘贴上面三条 `event-network` 就完成升级**：当时尚未具备完整的 AI 安全池和自维护服务规则。
 
