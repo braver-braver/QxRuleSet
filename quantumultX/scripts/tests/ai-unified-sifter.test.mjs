@@ -77,16 +77,16 @@ test('one iOS AI policy is used for all 3 first-party rules, with direct-first f
   assert.match(ios, /^final, direct$/m)
 })
 
-test('macOS retains original independent AI policies, tasks and routing', () => {
-  for (const name of ['OpenAi服务', 'ClaudeAi服务', 'Gemini']) {
-    assert.ok(mac.includes('static=' + name + ','))
-  }
+test('macOS now shares the strict AI policy while preserving sticky network recovery', () => {
+  assert.match(mac, /^static=海外AI, 🛡 AI联合安全节点, reject,/m)
+  assert.match(mac, /^static=🛡 AI联合安全节点, reject, server-tag-regex=/m)
   for (const name of ['openai', 'claude', 'gemini']) {
-    assert.match(mac, new RegExp('ai-node-sifter\\.js#provider=' + name + '&mode=sticky'))
     const row = mac.split('\n').find(s => s.includes('/rules/ai/' + name + '.list,'))
-    assert.ok(row && !row.includes('force-policy=海外AI'), name)
+    assert.ok(row && row.includes('force-policy=海外AI'), name)
   }
-  assert.ok(!mac.includes('static=海外AI,'))
+  assert.ok(mac.includes('#provider=all&mode=sticky'))
+  assert.ok(mac.includes('#provider=all&mode=sticky&trigger=network&delay=7'))
+  assert.ok(mac.includes('static=AI应用更新,'))
   assert.match(mac, /^final, proxy$/m)
 })
 
