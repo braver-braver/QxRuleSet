@@ -1,5 +1,16 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-17 macOS 联合 AI 与 Homebrew 定向分流（2026.11.17.1）
+
+macOS 模板从此版本开始采用与 iOS 一致的单一 `海外AI` 策略组，但使用 `provider=all&mode=sticky`，开盖/切换 Wi-Fi 只安排一次 7 秒网络恢复复核。只有历史上已通过三重验证的当前节点才能因临时超时暂留；一旦确认地区受限便先切 `reject`，再检测替代节点。
+
+同时在 `[filter_local]` 中独立路由 `formulae.brew.sh` 至 `Homebrew服务`：默认 `direct`，失败后可**手动**切新加坡或美国节点；不自动透明重试。macOS **仍保留 `final, proxy`**，以免未知海外开发域名突然失去代理，iOS 继续维持 `final, direct`。
+
+**迁移提示：** 先备份私人 Profile。必须同时迁移 `[policy]` 的两个联合 AI 组及 Homebrew 组、`[task_local]` 联合手动/定时/网络事件、`[filter_remote]` 的三条 `force-policy=海外AI` 和 `[filter_local]` 的 Host 规则。刷新脚本缓存后，再首次运行联合筛选。不可只更改策略组名称。
+
+详细步骤和 Homebrew API 验收见 [macOS 分流升级指南](macos-routing.md)。
+
+
 ## 2026-11-16 iOS 海外 AI 单策略（模板 2026.11.16.2）
 
 从本版本起，iOS 采用独立于 macOS 的联合 AI 配置：
@@ -16,7 +27,7 @@ static=海外AI, 🛡 AI联合安全节点, reject
 # 只保留一个 ai-node-sifter.js#provider=all 手动任务和一个定时复核
 ```
 
-三个源规则文件依旧独立更新；只是 iOS 日常出口统一到一个策略组。安全脚本必须对**同一节点**分别验证 OpenAI、Claude 和 Gemini，普通 400/401/429 或网关 HTML 不能视为成功，任何一项失败或不确定都不会自动选择为联合出口。macOS 的三个独立安全池及 sticky/network 恢复任务保持不变。
+三个源规则文件依旧独立更新；只是 iOS 日常出口统一到一个策略组。安全脚本必须对**同一节点**分别验证 OpenAI、Claude 和 Gemini，普通 400/401/429 或网关 HTML 不能视为成功，任何一项失败或不确定都不会自动选择为联合出口。**2026-11-16 当时 macOS 仍保留独立安全池；从 2026-11-17 的 macOS 模板起已改为联合策略，见本页上方章节。**
 
 **迁移旧私人 Profile 时不能只修改 `force-policy`**：还需从新版 iOS 模板复制 `海外AI` 和 `🛡 AI联合安全节点` 两个策略定义，替换旧三个 provider 的任务为单一 `#provider=all`，并更新远端脚本；否则规则会引用不存在的策略组。先备份原 Profile，再启动新模板做验收。
 
