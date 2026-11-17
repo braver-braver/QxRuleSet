@@ -61,7 +61,7 @@ for (const platform of ['ios', 'macos']) {
     const lines = remote.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'))
     const claude = lines.findIndex(s => s.includes('/rules/ai/claude.list,'))
     assert.ok(claude >= 0)
-    assert.match(lines[claude], /force-policy=海外AI(?:,|$)/)
+    assert.match(lines[claude], platform === 'ios' ? /force-policy=海外AI(?:,|$)/ : /force-policy=ClaudeAi服务(?:,|$)/)
     assert.match(lines[claude], /enabled=true/)
     assert.ok(!lines.some(s => s.includes('/rules/ai/claude-telemetry.list,')))
     if (platform === 'macos') {
