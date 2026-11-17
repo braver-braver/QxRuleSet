@@ -19,12 +19,8 @@ const AI_POLICY_DEFAULTS = {
     ["🛡 AI联合安全节点", ["reject"]]
   ]),
   macOS: new Map([
-    ["OpenAi服务", ["🤖 OpenAI安全节点", "reject"]],
-    ["ClaudeAi服务", ["🧠 Claude安全节点", "reject"]],
-    ["Gemini", ["✨ Gemini安全节点", "reject"]],
-    ["🤖 OpenAI安全节点", ["reject"]],
-    ["🧠 Claude安全节点", ["reject"]],
-    ["✨ Gemini安全节点", ["reject"]]
+    ["海外AI", ["🛡 AI联合安全节点", "reject"]],
+    ["🛡 AI联合安全节点", ["reject"]]
   ])
 };
 
@@ -175,9 +171,7 @@ for (let i = 0; i < files.length; i++) {
   });
 
   test(platform + ": AI region filters stay isolated from the ordinary cross-region pool", () => {
-    const pools = platform === "iOS"
-      ? ["🛡 AI联合安全节点"]
-      : ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"];
+    const pools = ["🛡 AI联合安全节点"];
     for (const name of pools) {
       const pattern = policyRegex(groupOf(model, name, "static"));
       for (const tag of ["US-01", "UK-01", "JP-01", "SG-01"]) {
@@ -231,6 +225,6 @@ test("both templates keep consistent cross-region failover definitions", () => {
   }
   assert.ok(!ios.groups.has("AI应用更新"), "iOS should not inherit macOS app updater group");
   assert.ok(ios.groups.has("海外AI"), "iOS exposes one shared overseas AI policy");
-  assert.ok(!mac.groups.has("海外AI"), "macOS remains provider-isolated in this phase");
+  assert.ok(mac.groups.has("海外AI"), "macOS also exposes one strictly verified AI policy");
   assert.ok(mac.groups.has("AI应用更新"), "macOS updater must remain available");
 });
