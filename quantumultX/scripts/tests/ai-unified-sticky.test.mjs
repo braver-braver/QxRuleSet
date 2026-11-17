@@ -122,3 +122,18 @@ test('on network event, the shared AI task rechecks after a delay and stays quie
   assert.ok(r.prefs.has('qxrule.ai-node-sifter.all.network-event'))
   assert.ok(r.calls.length >= 9)
 })
+
+test('a manually chosen but never-verified shared AI exit does not survive UNCERTAIN', async () => {
+  const r = await runSticky({ selected: 'US-01', remembered: null, responses: {
+    'api.openai.com/v1/models': { statusCode: 429, body: '{"error":"rate limited"}' }
+  } })
+  assert.equal(r.current, 'reject', 'unknown leaf must not be treated as trusted sticky history')
+  assert.deepEqual(r.events.filter(e => e.action === 'set_policy_state')
+    .map(e => e.content['🛡 AI联合安全节点']), ['reject'])
+})
+
+test('empty shared candidate pool fails closed even with sticky enabled', async () => {
+  const r = await runSticky({ selected: 'US-01', candidates: [] })
+  assert.equal(r.current, 'reject')
+  assert.equal(r.calls.length, 0)
+})
