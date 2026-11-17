@@ -15,16 +15,16 @@ const AUTOMATIC = ["社交媒体", "国际媒体", "GitHub服务", "油管服务
 const MANUAL_BACKUP = ["全球策略", "谷歌服务"];
 const AI_POLICY_DEFAULTS = {
   iOS: new Map([
+    ["海外AI", ["🛡 AI联合安全节点", "reject"]],
+    ["🛡 AI联合安全节点", ["reject"]]
+  ]),
+  macOS: new Map([
     ["OpenAi服务", ["🤖 OpenAI安全节点", "reject"]],
     ["ClaudeAi服务", ["🧠 Claude安全节点", "reject"]],
     ["Gemini", ["✨ Gemini安全节点", "reject"]],
     ["🤖 OpenAI安全节点", ["reject"]],
     ["🧠 Claude安全节点", ["reject"]],
     ["✨ Gemini安全节点", ["reject"]]
-  ]),
-  macOS: new Map([
-    ["海外AI", ["🛡 AI联合安全节点", "reject"]],
-    ["🛡 AI联合安全节点", ["reject"]]
   ])
 };
 
