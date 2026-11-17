@@ -7,6 +7,8 @@
 - 远程规则：检查 `force-policy` 是否与规则用途一致。
 - 地区节点：修改 `server-tag-regex` 后检查大小写修饰符和排除表达式。
 - 脚本：修改后至少做 JavaScript 语法检查。
+- macOS Homebrew API 只通过精确的 `formulae.brew.sh` 例外匹配 `Homebrew服务`，默认直连，允许用户手动切换固定地区出口；不自动尝试失败请求的代理重放。
+- macOS 与 iOS 的 `海外AI` 均要求三家服务共同验证；macOS sticky 只保留已验证节点的暂时不确定状态，明确被拒绝时必须切回 `reject`。参阅 [macOS 部署](quantumultx/macos-routing.md)。
 
 ## 远端规则资源体检
 
