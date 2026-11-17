@@ -15,6 +15,7 @@ QxRuleSet/
 │       ├── configuration.md
 │       ├── dependencies.md
 │       ├── ios.md
+│       ├── macos-routing.md
 │       ├── openai.md
 │       ├── rules.md
 │       ├── rewrites.md
