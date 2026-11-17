@@ -833,7 +833,12 @@ async function finish(cfg, action, selected, results, latency, args) {
   let safe = results.filter(x => x.status === "pass")
   if (!safe.length) {
     if (!sticky || provider === "all") {
-      if (!rejectedForThisScan) await setPolicy(policy, FAIL_CLOSED, args)
+      // Do not re-write reject when QX is already on reject (for example,
+      // an inconclusive last-good restore). This also avoids races with
+      // concurrent network events and unnecessary policy change notifications.
+      if (!rejectedForThisScan && !(provider === "all" && current === FAIL_CLOSED)) {
+        await setPolicy(policy, FAIL_CLOSED, args)
+      }
       await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {}, args)
       return
     }
