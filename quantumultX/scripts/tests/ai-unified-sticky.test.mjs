@@ -79,7 +79,7 @@ async function runSticky({
 }
 
 test('sticky joint verification holds a previously validated current node on transient 429', async () => {
-  const r = await runSticky({ responses: {
+  const r = await runSticky({ remembered: 'US-01', responses: {
     'generativelanguage.googleapis.com/v1beta/models': {
       statusCode: 429, body: '{"error":"too many requests"}'
     } } })
