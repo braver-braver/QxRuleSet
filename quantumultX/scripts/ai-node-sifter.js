@@ -1,7 +1,7 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.3.0
- * updated: 2026-11-16
+ * version: 0.3.1
+ * updated: 2026-11-17
  *
  * Goal:
  * - keep AI traffic on a node that is actually accepted by the provider
@@ -19,7 +19,8 @@
  * event-interaction .../ai-node-sifter.js#provider=openai
  * event-interaction .../ai-node-sifter.js#provider=claude
  * event-interaction .../ai-node-sifter.js#provider=gemini
- * event-interaction .../ai-node-sifter.js#provider=all (iOS shared AI exit)
+ * event-interaction .../ai-node-sifter.js#provider=all (shared AI exit)
+ * event-network .../ai-node-sifter.js#provider=all&mode=sticky&trigger=network&delay=7 (macOS)
  */
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -723,7 +724,9 @@ async function finish(cfg, action, selected, results, latency, args) {
   let lastGood = loadLastGood(provider)
 
   if (!candidates.length) {
-    if (!sticky) {
+    // A shared three-provider policy must never retain a stale leaf with
+    // no remaining candidates, even when desktop sticky recovery is enabled.
+    if (!sticky || provider === "all") {
       await setPolicy(policy, FAIL_CLOSED, args)
       await finish(cfg, "没有候选节点，已 fail-closed", FAIL_CLOSED, [], {}, args)
     } else {
@@ -749,9 +752,11 @@ async function finish(cfg, action, selected, results, latency, args) {
       return
     }
 
-    if (sticky && currentResult.status === "uncertain") {
-      // A timeout/DNS/challenge immediately after wake is not proof that the
-      // exit became unsafe. Keep the node selected and ask the user to retry.
+    if (sticky && currentResult.status === "uncertain" &&
+        (provider !== "all" || (lastGood && lastGood.node === current))) {
+      // Preserve an uncertain desktop shared exit ONLY if the same leaf was
+      // previously verified across all providers. An arbitrary manually
+      // selected or unknown leaf cannot be treated as last-known-good.
       await finish(
         cfg,
         "当前节点暂时无法确认，保留原选择；网络稳定后将再次复核",
@@ -763,8 +768,9 @@ async function finish(cfg, action, selected, results, latency, args) {
       return
     }
 
-    if (!sticky) {
-      // Legacy fail-closed mode: stop AI traffic before scanning alternatives.
+    if (!sticky || provider === "all") {
+      // For the combined AI policy, a confirmed block or an unverified
+      // manually selected leaf must be rejected *before* looking for alternatives.
       await setPolicy(policy, FAIL_CLOSED, args)
     }
   } else if (sticky && lastGood && candidates.indexOf(lastGood.node) >= 0) {
@@ -790,8 +796,11 @@ async function finish(cfg, action, selected, results, latency, args) {
       return
     }
 
-    if (rememberedResult.status === "uncertain") {
-      // Preserve continuity across transient network recovery. This node was
+    if (rememberedResult.status === "uncertain" && provider !== "all") {
+      // Preserve continuity across transient network recovery for legacy
+      // per-provider policies only. Shared AI requires a fresh three-way PASS
+      // before it can restore a remembered node from reject.
+      // This node was
       // previously verified; restore it, but notify because this run could not
       // positively re-verify it.
       await setPolicy(policy, lastGood.node, args)
@@ -821,15 +830,14 @@ async function finish(cfg, action, selected, results, latency, args) {
 
   let safe = results.filter(x => x.status === "pass")
   if (!safe.length) {
-    if (!sticky) {
+    if (!sticky || provider === "all") {
       await setPolicy(policy, FAIL_CLOSED, args)
       await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {}, args)
       return
     }
 
-    // Sticky recovery never converts a transient/confirmed outage into a
-    // permanent reject if a real node is already selected. The user gets a
-    // notification instead and can retry after the network settles.
+    // Legacy single-provider sticky recovery preserves existing selections.
+    // Combined AI fail-closed handling above does not keep confirmed-bad exits.
     if (current && candidates.indexOf(current) >= 0) {
       await finish(cfg, "未找到可替代的验证节点，保留原选择并提醒", current, results, {}, args)
       return
