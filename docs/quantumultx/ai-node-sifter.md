@@ -6,7 +6,7 @@
 
 普通的 `available` 或 `url-latency-benchmark` 只能判断节点是否可联网、延迟是否合适，不能判断该出口是否真正被 OpenAI、Claude 或 Gemini 接受。
 
-AI 安全节点层额外执行服务级验证。**iOS 从 2026.11.16.2、macOS 从 2026.11.17.1 起均采用 `provider=all`，三个 AI 服务共享一个 `海外AI` 策略，要求同一节点分别通过 OpenAI、Claude、Gemini 的检查。** iOS 默认严格 fail-closed；macOS 使用 sticky recovery 保留已验证节点度过短暂网络中断，但确认地区限制后必须拒绝。
+AI 安全节点脚本提供服务级验证。**iOS 仍使用 `provider=all` 的联合 AI 策略及自动复核；macOS 自 2026.11.17.2 起使用三个独立手动固定出口，不再自动调用本脚本。**
 
 > 该机制用于降低误走不受支持出口的风险，不构成任何账号安全或封禁保证。
 
@@ -20,15 +20,19 @@ claude.list ─┼─→ 海外AI → 🛡 AI联合安全节点 → 同一节点
 gemini.list ─┘
 ```
 
-**macOS（联合出口 + sticky）：**
+**macOS（独立手动固定出口，不触发筛选脚本）：**
 
+```text
+openai.list → OpenAi服务 → 🤖 OpenAI安全节点
+claude.list → ClaudeAi服务 → 🧠 Claude安全节点
+gemini.list → Gemini → ✨ Gemini安全节点
 ```text
 openai.list ─┐
 claude.list ─┼─→ 海外AI → 🛡 AI联合安全节点 → 同一节点三重验证
 gemini.list ─┘                              ↳ last-known-good / event-network
 ```
 
-两端均使用一个带 `server-tag-regex` 的 `static` 联合安全池，只包含 US / GB / JP / SG 候选；不复制共享 Auth0/Cloudflare/Google 基础设施的宽泛规则。macOS 的 `AI应用更新` 仍保留为**独立下载策略**。
+iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 US / GB / JP / SG / TW。macOS 仅人工选择节点，不保证候选节点已通过服务验证。`AI应用更新` 保留独立策略。
 
 当前候选名称只预筛：
 
@@ -46,7 +50,7 @@ gemini.list ─┘                              ↳ last-known-good / event-netw
 添加并更新节点订阅后：
 
 - **iOS：**手动运行一次 `海外 AI 联合安全节点`，等待同一候选节点通过全部三项检测；少一项或任何响应不确定都不会自动选中。
-- **macOS：**手动运行一次 `海外 AI 联合安全节点`，建立首个三家均通过的出口并记录 last-known-good；之后由联合定时任务和网络变化事件维护。
+- **macOS：**在 OpenAI、Claude、Gemini 三个策略中分别人工选择一个真实节点。四个诊断工具只查询，不负责设置节点；无定时或网络自动 AI 任务。
 
 只有对应的安全池选到验证通过的节点后，相关流量才会恢复。
 
@@ -171,9 +175,9 @@ verifiedAt
 
 该模式仍适用于希望“任何无法确认都立即阻断”的场景。
 
-### sticky recovery（macOS 默认）
+### sticky recovery（兼容历史私人配置；新版 macOS 模板不调用）
 
-macOS 传入 `provider=all&mode=sticky`：
+旧版 macOS / 私人配置可能传入 `provider=all&mode=sticky`：
 
 ```text
 当前联合节点 PASS
@@ -191,7 +195,7 @@ macOS 传入 `provider=all&mode=sticky`：
 
 如果配置重载后当前为 `reject`，可以使用 `last-known-good` 复测；**只有新的联合检测为 PASS 才恢复**，UNCERTAIN 与 FAIL 均不能从 reject 恢复该出口。无候选节点时同样保持 reject。
 
-旧脚本独立的 `provider=openai/claude/gemini` 仍支持原有 sticky 行为以便兼容既有私人配置，但新 macOS 模板不再调用这三个入口。单一联合检测降低重复任务数量，也避免不同 AI 服务意外使用不同地区出口。
+脚本仍兼容 `provider=openai/claude/gemini` 和 `provider=all` 的历史配置；新版 macOS 模板均不调用这些入口。
 
 ## iOS/macOS 联合节点的证据门槛
 
@@ -202,7 +206,7 @@ macOS 传入 `provider=all&mode=sticky`：
 - Gemini 只接受 Google 官方形状的 `API_KEY_INVALID` / `google.rpc.ErrorInfo`，或真实模型列表；不能把所有 400/401 直接当作接口可达。对登录跳转，还需校验 HTTPS 和第一方域名。
 - 任一服务明确失败则拒绝该共同节点；任一结果不确定、出口地区不一致、云端挑战或超时都不予选中。仅三者均通过且地区一致，才写入联合安全策略。
 
-这是**网络出口可达性的保守检测**，不包含真实 API Key，不能证明账号登录、订阅等级、模型额度或未来不会触发风控。联合验证消耗的 HTTP 请求较多，因此两端均只安排一个手动任务及每天两次复核。单轮最多扫描 **9 个新候选节点**（当前与历史节点按原有逻辑单独复测），避免大量机场节点造成请求风暴；超出数量的节点本轮不扫描，也不会自动认定为安全。
+这是**网络出口可达性的保守检测**，不包含真实 API Key，不能证明账号登录、订阅等级、模型额度或未来不会触发风控。联合验证消耗的 HTTP 请求较多，因此 iOS 安排一个手动任务及每天两次复核；macOS 不安排 AI 筛选任务。单轮最多扫描 **9 个新候选节点**（当前与历史节点按原有逻辑单独复测），避免大量机场节点造成请求风暴；超出数量的节点本轮不扫描，也不会自动认定为安全。
 
 ## 自动任务
 
@@ -210,22 +214,11 @@ macOS 传入 `provider=all&mode=sticky`：
 
 iOS 模板每天在 03:15 和 15:15 执行一次 `provider=all` 联合复核（严格 fail-closed）。
 
-macOS 模板同样每天在 03:15 和 15:15 复核一次 `provider=all&mode=sticky`。
+macOS 模板不再定时复核 AI 节点。
 
 ### 网络变化复核
 
-macOS 开盖、Wi-Fi 重连及网络切换时运行一次：
-
-```text
-event-network
-  → provider=all&mode=sticky&trigger=network&delay=7
-  → 网络稳定 7 秒后检查当前或历史联合出口
-  → PASS：保持/恢复，静默
-  → UNCERTAIN：只保留此前经三重验证的当前选择并提醒
-  → FAIL：拒绝已知不支持的出口，再尝试替代节点
-```
-
-每次事件写入同一个 `provider=all` 令牌；旧事件被更新事件覆盖后不得改写策略或通知。一次联合检测代替以前三次错峰检测。
+新版 macOS 模板不再注册 `event-network` AI 复核任务。以下联合脚本的恢复逻辑仅供使用它的旧配置或其他终端参考。
 
 ## Quantumult X API
 
