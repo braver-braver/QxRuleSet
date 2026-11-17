@@ -15,8 +15,12 @@ const AUTOMATIC = ["社交媒体", "国际媒体", "GitHub服务", "油管服务
 const MANUAL_BACKUP = ["全球策略", "谷歌服务"];
 const AI_POLICY_DEFAULTS = {
   iOS: new Map([
-    ["海外AI", ["🛡 AI联合安全节点", "reject"]],
-    ["🛡 AI联合安全节点", ["reject"]]
+    ["OpenAi服务", ["🤖 OpenAI安全节点", "reject"]],
+    ["ClaudeAi服务", ["🧠 Claude安全节点", "reject"]],
+    ["Gemini", ["✨ Gemini安全节点", "reject"]],
+    ["🤖 OpenAI安全节点", ["reject"]],
+    ["🧠 Claude安全节点", ["reject"]],
+    ["✨ Gemini安全节点", ["reject"]]
   ]),
   macOS: new Map([
     ["海外AI", ["🛡 AI联合安全节点", "reject"]],
@@ -171,13 +175,13 @@ for (let i = 0; i < files.length; i++) {
   });
 
   test(platform + ": AI region filters stay isolated from the ordinary cross-region pool", () => {
-    const pools = ["🛡 AI联合安全节点"];
+    const pools = platform === "iOS" ? ["🛡 AI联合安全节点"] : ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"];
     for (const name of pools) {
       const pattern = policyRegex(groupOf(model, name, "static"));
-      for (const tag of ["US-01", "UK-01", "JP-01", "SG-01"]) {
+      for (const tag of (platform === "iOS" ? ["US-01", "UK-01", "JP-01", "SG-01"] : ["US-01", "UK-01", "JP-01", "SG-01", "TW-01", "🇹🇼 台湾 02"])) {
         assert.ok(pattern.test(tag), "AI allowed region missing: " + name + " / " + tag);
       }
-      for (const tag of ["HK-01", "TW-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"]) {
+      for (const tag of (platform === "iOS" ? ["HK-01", "TW-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"] : ["HK-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"])) {
         assert.ok(!pattern.test(tag), "AI isolation widened: " + name + " / " + tag);
       }
     }
@@ -225,6 +229,6 @@ test("both templates keep consistent cross-region failover definitions", () => {
   }
   assert.ok(!ios.groups.has("AI应用更新"), "iOS should not inherit macOS app updater group");
   assert.ok(ios.groups.has("海外AI"), "iOS exposes one shared overseas AI policy");
-  assert.ok(mac.groups.has("海外AI"), "macOS also exposes one strictly verified AI policy");
+  assert.ok(!mac.groups.has("海外AI"), "macOS keeps independently selected AI exits");
   assert.ok(mac.groups.has("AI应用更新"), "macOS updater must remain available");
 });
