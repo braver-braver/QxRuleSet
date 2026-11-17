@@ -13,14 +13,20 @@ const files = [
 const BACKUP = "🌍 跨区顺选·健康";
 const AUTOMATIC = ["社交媒体", "国际媒体", "GitHub服务", "油管服务", "Bing服务"];
 const MANUAL_BACKUP = ["全球策略", "谷歌服务"];
-const AI_POLICY_DEFAULTS = new Map([
-  ["OpenAi服务", ["🤖 OpenAI安全节点", "reject"]],
-  ["ClaudeAi服务", ["🧠 Claude安全节点", "reject"]],
-  ["Gemini", ["✨ Gemini安全节点", "reject"]],
-  ["🤖 OpenAI安全节点", ["reject"]],
-  ["🧠 Claude安全节点", ["reject"]],
-  ["✨ Gemini安全节点", ["reject"]]
-]);
+const AI_POLICY_DEFAULTS = {
+  iOS: new Map([
+    ["海外AI", ["🛡 AI联合安全节点", "reject"]],
+    ["🛡 AI联合安全节点", ["reject"]]
+  ]),
+  macOS: new Map([
+    ["OpenAi服务", ["🤖 OpenAI安全节点", "reject"]],
+    ["ClaudeAi服务", ["🧠 Claude安全节点", "reject"]],
+    ["Gemini", ["✨ Gemini安全节点", "reject"]],
+    ["🤖 OpenAI安全节点", ["reject"]],
+    ["🧠 Claude安全节点", ["reject"]],
+    ["✨ Gemini安全节点", ["reject"]]
+  ])
+};
 
 function loadPolicies(file) {
   const content = readFileSync(file, "utf8");
@@ -162,14 +168,17 @@ for (let i = 0; i < files.length; i++) {
     assert.equal(candidates(groupOf(model, "BiliBili", "static"))[0], "direct");
     assert.equal(candidates(groupOf(model, "苹果服务", "static"))[0], "direct");
     assert.equal(candidates(groupOf(model, "AppleTV服务", "static"))[0], "🇺🇸 美国顺选·健康");
-    for (const [name, expected] of AI_POLICY_DEFAULTS) {
+    for (const [name, expected] of AI_POLICY_DEFAULTS[platform]) {
       assert.deepEqual(candidates(groupOf(model, name, "static")),
         expected, "AI fail-closed policy modified: " + name);
     }
   });
 
   test(platform + ": AI region filters stay isolated from the ordinary cross-region pool", () => {
-    for (const name of ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"]) {
+    const pools = platform === "iOS"
+      ? ["🛡 AI联合安全节点"]
+      : ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"];
+    for (const name of pools) {
       const pattern = policyRegex(groupOf(model, name, "static"));
       for (const tag of ["US-01", "UK-01", "JP-01", "SG-01"]) {
         assert.ok(pattern.test(tag), "AI allowed region missing: " + name + " / " + tag);
@@ -221,5 +230,7 @@ test("both templates keep consistent cross-region failover definitions", () => {
     assert.equal(groupOf(ios, name).line, groupOf(mac, name).line, name);
   }
   assert.ok(!ios.groups.has("AI应用更新"), "iOS should not inherit macOS app updater group");
+  assert.ok(ios.groups.has("海外AI"), "iOS exposes one shared overseas AI policy");
+  assert.ok(!mac.groups.has("海外AI"), "macOS remains provider-isolated in this phase");
   assert.ok(mac.groups.has("AI应用更新"), "macOS updater must remain available");
 });

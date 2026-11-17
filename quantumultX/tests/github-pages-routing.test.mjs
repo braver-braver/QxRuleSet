@@ -52,7 +52,10 @@ for (const platform of ['ios', 'macos']) {
     const local = conf.split('[filter_local]')[1]?.split(/\n\[/)[0]
     assert.ok(local, 'filter_local missing')
     assert.ok(/geoip,\s*cn,\s*direct/i.test(local), 'existing China direct rule kept')
-    assert.ok(/final,\s*proxy/i.test(local), 'existing fallback kept')
+    const expectedFinal = platform === 'ios' ? 'direct' : 'proxy'
+    const actualFinals = parse(local).filter(r => r[0].toLowerCase() === 'final')
+    assert.deepEqual(actualFinals.map(r => r[1].toLowerCase()), [expectedFinal],
+      'platform-specific fallback must not silently change')
     const localDomainRules = parse(local).filter(r =>
       ['host', 'host-suffix'].includes(r[0].toLowerCase()))
     for (const host of ['github.io', 'user.github.io', 'project.user.github.io']) {
