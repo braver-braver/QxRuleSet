@@ -210,15 +210,15 @@ test('full provider=all task selects only the jointly verified leaf policy', asy
   assert.ok(out.calls.every(c => c.opts?.policy === 'US-01'))
 })
 
-test('full provider=all task fails closed when any one provider is unverified', async () => {
+test('full provider=all task stays fail-closed when a provider is unverified', async () => {
   const out = await runFullSifter({
     'generativelanguage.googleapis.com/v1beta/models': {
       statusCode: 400, body: '{"error":"Gateway Bad Request"}'
     }
   })
   const writes = out.actions.filter(a => a.action === 'set_policy_state')
-  assert.equal(writes.length, 1)
-  assert.equal(writes[0].content['🛡 AI联合安全节点'], 'reject')
+  // The mock starts on reject. Keeping reject must not cause a redundant write.
+  assert.equal(writes.length, 0)
   assert.equal(out.responses.length, 1)
   assert.match(out.responses[0].htmlMessage, /reject/)
 })
