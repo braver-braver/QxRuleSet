@@ -17,38 +17,34 @@ const local = section(mac, 'filter_local')
 const remote = section(mac, 'filter_remote')
 const tasks = section(mac, 'task_local')
 
-test('macOS AI services use one strict shared exit with distinct first-party rule files', () => {
-  assert.ok(policy.some(x => x.startsWith('static=海外AI, 🛡 AI联合安全节点, reject,')))
-  assert.ok(policy.some(x => x.startsWith('static=🛡 AI联合安全节点, reject, server-tag-regex=')))
-  for (const service of ['openai', 'claude', 'gemini']) {
-    const r = remote.filter(x => x.includes('/rules/ai/' + service + '.list,'))
-    assert.equal(r.length, 1, 'one resource required for ' + service)
-    assert.match(r[0], /force-policy=海外AI(?:,|$)/)
-    assert.match(r[0], /enabled=true(?:,|$)/)
+test('macOS AI providers have independent sticky exits and only manual diagnostics', () => {
+  for (const [service, policyName, pool] of [
+    ['openai', 'OpenAi服务', '🤖 OpenAI安全节点'],
+    ['claude', 'ClaudeAi服务', '🧠 Claude安全节点'],
+    ['gemini', 'Gemini', '✨ Gemini安全节点']
+  ]) {
+    assert.ok(policy.some(x => x.startsWith('static=' + policyName + ', ' + pool + ', reject,')))
+    const rule = remote.find(x => x.includes('/rules/ai/' + service + '.list,'))
+    assert.ok(rule && rule.includes('force-policy=' + policyName + ','), service)
+    const candidate = policy.find(x => x.startsWith('static=' + pool + ', reject, server-tag-regex='))
+    assert.ok(candidate && /台湾|台灣|🇹🇼/.test(candidate))
   }
-  for (const name of ['OpenAi服务', 'ClaudeAi服务', 'Gemini',
-                      '🤖 OpenAI安全节点', '🧠 Claude安全节点', '✨ Gemini安全节点']) {
-    assert.ok(!policy.some(x => x.startsWith('static=' + name + ',')), 'obsolete group: ' + name)
+  assert.ok(!policy.some(x => x.startsWith('static=海外AI,')))
+  assert.equal(tasks.length, 4)
+  assert.ok(tasks.every(x => x.startsWith('event-interaction ')))
+  assert.ok(!tasks.some(x => x.includes('ai-node-sifter.js')))
+  for (const filename of ['geo-query.js','node-reputation.js','traffic-check.js','streaming-ui-check.js']) {
+    assert.ok(tasks.some(x => x.includes(filename)), filename)
   }
-  assert.ok(local.includes('host-suffix, manus.im, 全球策略'),
-    'Manus is not a three-provider AI unlock dependency')
 })
 
-test('macOS retains updater exceptions and sticky only on the single shared AI provider', () => {
+test('updater stays independent of AI fixed exits', () => {
   assert.ok(policy.some(x => x.startsWith('static=AI应用更新,')))
   const updaterIndex = remote.findIndex(x => x.includes('/rules/ai/updates.list,'))
   const aiIndex = remote.findIndex(x => x.includes('/rules/ai/openai.list,'))
   assert.ok(updaterIndex >= 0 && updaterIndex < aiIndex)
   assert.match(remote[updaterIndex], /force-policy=AI应用更新(?:,|$)/)
-  const sifterTasks = tasks.filter(x => x.includes('/ai-node-sifter.js#'))
-  assert.equal(sifterTasks.length, 3, 'manual, cron and one network event only')
-  assert.equal(sifterTasks.filter(x => x.startsWith('event-interaction ')).length, 1)
-  assert.equal(sifterTasks.filter(x => x.startsWith('event-network ')).length, 1)
-  assert.equal(sifterTasks.filter(x => /^[0-9]/.test(x)).length, 1)
-  assert.ok(sifterTasks.every(x => x.includes('#provider=all&mode=sticky')))
-  assert.ok(sifterTasks.some(x => x.includes('&trigger=network&delay=7')),
-    'coalesce wake/reconnect checks after network stabilization')
-  assert.doesNotMatch(mac, /ai-node-sifter\.js#provider=(?:openai|claude|gemini)/)
+  assert.ok(local.includes('host-suffix, manus.im, 全球策略'))
 })
 
 test('formulae.brew.sh routes to a direct-first, user-switchable Homebrew policy', () => {
