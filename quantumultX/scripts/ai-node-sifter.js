@@ -737,6 +737,7 @@ async function finish(cfg, action, selected, results, latency, args) {
 
   let currentResult = null
   let rememberedResult = null
+  let rejectedForThisScan = false
 
   // Sticky routing: first re-check the currently selected real node.
   if (current && candidates.indexOf(current) >= 0) {
@@ -772,6 +773,7 @@ async function finish(cfg, action, selected, results, latency, args) {
       // For the combined AI policy, a confirmed block or an unverified
       // manually selected leaf must be rejected *before* looking for alternatives.
       await setPolicy(policy, FAIL_CLOSED, args)
+      rejectedForThisScan = true
     }
   } else if (sticky && lastGood && candidates.indexOf(lastGood.node) >= 0) {
     // QX may come back from sleep/reload with the static policy on reject.
@@ -831,7 +833,7 @@ async function finish(cfg, action, selected, results, latency, args) {
   let safe = results.filter(x => x.status === "pass")
   if (!safe.length) {
     if (!sticky || provider === "all") {
-      await setPolicy(policy, FAIL_CLOSED, args)
+      if (!rejectedForThisScan) await setPolicy(policy, FAIL_CLOSED, args)
       await finish(cfg, "没有验证通过的节点，已 fail-closed", FAIL_CLOSED, results, {}, args)
       return
     }
