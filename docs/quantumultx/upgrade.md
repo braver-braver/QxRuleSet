@@ -1,5 +1,16 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-18 iOS DNS 分流维护（模板 2026.11.18.1）
+
+iOS 模板 DNS 默认由 AliDNS + DNSPod 并发改为 **Google DoH + Quad9 DoH 并发**，用于未匹配国内定向规则的域名；`*.cn` 统一按域名覆盖到 AliDNS。原有腾讯、阿里、京东、哔哩哔哩、网易等根域/子域的国内 DoH 绑定保持不变。
+
+此调整只修改 `[dns]` 和模板版本标记。iOS 继续采用 `geoip, cn, direct`、`final, direct`，三家 AI 联合出口、任务、Rewrite 均保持不变。**IP/GEOIP 规则不是 DNS 解析器选择器**，国内 `.com` 等需要按需添加域名级 DoH。
+
+两台全局境外 DoH 为**并发冗余**，不是 Google → Quad9 的顺序回退。全局指定 DoH 后，无域名绑定的传统国内 DNS 不会成为自动兜底；若在某网络中两个境外 DoH 都无法访问，可能影响未匹配国内规则的直连域名。先备份私人 Profile，再在移动网络和 Wi-Fi 分别验收，不可直接覆盖带有私人订阅/证书的配置。
+
+详见 [iOS 配置维护说明](ios.md)。
+
+
 ## 2026-11-17 macOS 独立 AI 固定出口及 Homebrew 分流（2026.11.17.2）
 
 macOS 恢复 OpenAI、Claude、Gemini 三个独立手动固定出口，候选地区 US / GB / JP / SG / TW。只保留四项手动诊断任务，不运行 AI 筛选脚本、定时复核或网络变化复核；休眠恢复不会主动修改 AI 选定节点。iOS 联合 `海外AI` 不变。
