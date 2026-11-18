@@ -107,8 +107,8 @@ test('a single concrete node must pass OpenAI, Claude and Gemini probes', async 
 
 test('Taiwan exit passes only when OpenAI, Claude and Gemini verify the same TW region', async () => {
   const taiwan = {
-    'chatgpt.com/cdn-cgi/trace': { statusCode: 200, body: 'fl=1\\nloc=TW\\n' },
-    'claude.ai/cdn-cgi/trace': { statusCode: 200, body: 'loc=TW\\n' },
+    'chatgpt.com/cdn-cgi/trace': { statusCode: 200, body: 'fl=1\nloc=TW\n' },
+    'claude.ai/cdn-cgi/trace': { statusCode: 200, body: 'loc=TW\n' },
     'ipapi.co/json/': { statusCode: 200, body: '{"country_code":"TW"}' }
   }
   const { context, calls } = mockNetwork(taiwan)
