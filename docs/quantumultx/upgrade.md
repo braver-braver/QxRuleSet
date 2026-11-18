@@ -1,5 +1,11 @@
 # Quantumult X 版本定位与增量升级
 
+## 2026-11-18 iOS 联合 AI 池支持台湾节点（模板 2026.11.18.2）
+
+`🛡 AI联合安全节点` 新增 TW / 台湾 / 台灣 / Taipei 等标签候选，`ai-node-sifter.js` v0.3.2 同步允许 TW 出口。**地区匹配仅作为候选预筛**，仍由同一出口上的 OpenAI、Claude、Gemini 三重验证决定是否选中；明确地区拒绝、限流及不确定响应不会视为 PASS。
+
+配置迁移只需更新 iOS 联合 AI 安全池的 `server-tag-regex`、远端 `ai-node-sifter.js`，以及版本标记。原有三家 AI 的 `force-policy=海外AI`、DNS 分流、`geoip, cn, direct`、`final, direct` 保持不变。完成后刷新 QX 节点订阅和脚本缓存，再手动运行一次 AI 联合筛选确认实际出口。
+
 ## 2026-11-18 iOS DNS 分流维护（模板 2026.11.18.1）
 
 iOS 模板 DNS 默认由 AliDNS + DNSPod 并发改为 **Google DoH + Quad9 DoH 并发**，用于未匹配国内定向规则的域名；`*.cn` 统一按域名覆盖到 AliDNS。原有腾讯、阿里、京东、哔哩哔哩、网易等根域/子域的国内 DoH 绑定保持不变。

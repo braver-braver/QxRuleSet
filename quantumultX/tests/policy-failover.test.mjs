@@ -178,10 +178,10 @@ for (let i = 0; i < files.length; i++) {
     const pools = platform === "iOS" ? ["🛡 AI联合安全节点"] : ["🤖 OpenAI安全节点", "🧠 Claude安全节点", "✨ Gemini安全节点"];
     for (const name of pools) {
       const pattern = policyRegex(groupOf(model, name, "static"));
-      for (const tag of (platform === "iOS" ? ["US-01", "UK-01", "JP-01", "SG-01"] : ["US-01", "UK-01", "JP-01", "SG-01", "TW-01", "🇹🇼 台湾 02"])) {
+      for (const tag of (platform === "iOS" ? ["US-01", "UK-01", "JP-01", "SG-01", "TW-01", "tw-02", "🇹🇼 台湾 02", "臺北-03", "taipei-04"] : ["US-01", "UK-01", "JP-01", "SG-01", "TW-01", "🇹🇼 台湾 02"])) {
         assert.ok(pattern.test(tag), "AI allowed region missing: " + name + " / " + tag);
       }
-      for (const tag of (platform === "iOS" ? ["HK-01", "TW-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"] : ["HK-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"])) {
+      for (const tag of (platform === "iOS" ? ["HK-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"] : ["HK-01", "KR-01", "🇨🇳 上海线路", "US-官网", "NeteaseMusic-JP"])) {
         assert.ok(!pattern.test(tag), "AI isolation widened: " + name + " / " + tag);
       }
     }

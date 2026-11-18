@@ -1,7 +1,7 @@
 /**
  * AI Node Sifter for Quantumult X
- * version: 0.3.1
- * updated: 2026-11-17
+ * version: 0.3.2
+ * updated: 2026-11-18
  *
  * Goal:
  * - keep AI traffic on a node that is actually accepted by the provider
@@ -20,7 +20,7 @@
  * event-interaction .../ai-node-sifter.js#provider=claude
  * event-interaction .../ai-node-sifter.js#provider=gemini
  * event-interaction .../ai-node-sifter.js#provider=all (shared AI exit)
- * event-network .../ai-node-sifter.js#provider=all&mode=sticky&trigger=network&delay=7 (macOS)
+ * event-network .../ai-node-sifter.js#provider=all&mode=sticky&trigger=network&delay=7 (legacy macOS configurations)
  */
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -37,7 +37,7 @@ const PROVIDERS = {
   openai: {
     name: "OpenAI",
     policy: "🤖 OpenAI安全节点",
-    preferredRegions: ["US", "GB", "JP", "SG"],
+    preferredRegions: ["US", "GB", "JP", "SG", "TW"],
     traceUrl: "https://chatgpt.com/cdn-cgi/trace",
     webUrl: "https://chatgpt.com",
     apiUrl: "https://api.openai.com/v1/models"
@@ -45,7 +45,7 @@ const PROVIDERS = {
   claude: {
     name: "Claude",
     policy: "🧠 Claude安全节点",
-    preferredRegions: ["US", "GB", "JP", "SG"],
+    preferredRegions: ["US", "GB", "JP", "SG", "TW"],
     traceUrl: "https://claude.ai/cdn-cgi/trace",
     webUrl: "https://claude.ai",
     apiUrl: "https://api.anthropic.com/v1/models"
@@ -53,7 +53,7 @@ const PROVIDERS = {
   gemini: {
     name: "Gemini",
     policy: "✨ Gemini安全节点",
-    preferredRegions: ["US", "JP", "SG", "GB"],
+    preferredRegions: ["US", "JP", "SG", "GB", "TW"],
     traceUrl: "https://ipapi.co/json/",
     webUrl: "https://gemini.google.com/app",
     apiUrl: "https://generativelanguage.googleapis.com/v1beta/models?key=AIzaTest00000000000000000000000000"
@@ -61,7 +61,7 @@ const PROVIDERS = {
   all: {
     name: "海外AI",
     policy: "🛡 AI联合安全节点",
-    preferredRegions: ["US", "GB", "JP", "SG"]
+    preferredRegions: ["US", "GB", "JP", "SG", "TW"]
   }
 }
 

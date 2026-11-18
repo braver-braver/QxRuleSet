@@ -28,7 +28,7 @@ claude.list → ClaudeAi服务 → 🧠 Claude安全节点
 gemini.list → Gemini → ✨ Gemini安全节点
 ```
 
-iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 US / GB / JP / SG / TW。macOS 仅人工选择节点，不保证候选节点已通过服务验证。`AI应用更新` 保留独立策略。
+iOS 联合安全池与 macOS 三个独立候选池均允许 US / GB / JP / SG / TW；iOS 仍需对同一节点完成三家服务验证。macOS 仅人工选择节点，不保证候选节点已通过服务验证。`AI应用更新` 保留独立策略。
 
 筛选脚本当前候选名称只预筛（与 macOS 手选候选池不同）：
 
@@ -36,8 +36,9 @@ iOS 联合安全池采用 US / GB / JP / SG；macOS 三个独立候选池支持 
 - GB / UK / United Kingdom
 - JP / Japan
 - SG / Singapore
+- TW / Taiwan / Taipei / 台湾 / 台灣 / 臺灣
 
-节点名称只用于第一层缩小候选范围；iOS 的最终判定依赖实际出口地区和服务端响应。macOS 用户需自行确认所选节点是否适用于对应服务。
+节点名称只用于第一层缩小候选范围；即使节点名包含台湾，也必须由三家服务分别确认实际 TW 出口和可达性；iOS 的最终判定依赖实际出口地区和服务端响应。macOS 用户需自行确认所选节点是否适用于对应服务。
 
 ## 首次使用
 
@@ -77,7 +78,7 @@ opts: { policy: node }
 当前仅接受：
 
 ```text
-US / GB / JP / SG
+US / GB / JP / SG / TW
 ```
 
 名称和真实出口不一致时，以真实出口为准。

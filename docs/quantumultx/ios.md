@@ -36,6 +36,14 @@ quantumultX/qx-ios.conf
 
 待正式版和 macOS 侧都支持后，再考虑统一迁移。
 
+## AI 联合安全节点地区
+
+自 iOS 模板 **2026.11.18.2** 起，`🛡 AI联合安全节点` 的候选地区为 **US / GB / JP / SG / TW**。台湾节点可由 `🇹🇼`、`台湾`、`台灣`、`臺灣`、`台北`、`臺北`、`TW`、`Taiwan`、`Taipei` 等标签识别。
+
+这**只扩大候选范围**。远端 `ai-node-sifter.js`（v0.3.2）仍要求相同节点的 OpenAI、Claude、Gemini 探测均为 `PASS` 且出口地区一致。遇到 HTTP 451、明确地区受限或结果无法确认时，不会自动选中该台湾节点，仍维持联合组的 fail-closed 保护。
+
+更新后刷新节点订阅与远端筛选脚本缓存，手动运行「海外 AI 联合安全节点」检查台湾节点实际可用性。保留 `final, direct` 和原有 DNS、Rewrite、UDP 设置。
+
 ## DNS
 
 模板 **2026.11.18.1** 起采用“国内域名使用国内 DNS、其他域名使用境外 DNS”的保守分流。参考 [Deep Router 公共 DNS 选择指南](https://deeprouter.org/article/dns-servers-guide) 和 [Quantumult X 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf)。

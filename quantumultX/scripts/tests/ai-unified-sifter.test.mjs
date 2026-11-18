@@ -105,6 +105,31 @@ test('a single concrete node must pass OpenAI, Claude and Gemini probes', async 
   assert.ok(calls.every(c => c.opts?.policy === 'US-01'), 'all checks must use the same node')
 })
 
+test('Taiwan exit passes only when OpenAI, Claude and Gemini verify the same TW region', async () => {
+  const taiwan = {
+    'chatgpt.com/cdn-cgi/trace': { statusCode: 200, body: 'fl=1\\nloc=TW\\n' },
+    'claude.ai/cdn-cgi/trace': { statusCode: 200, body: 'loc=TW\\n' },
+    'ipapi.co/json/': { statusCode: 200, body: '{"country_code":"TW"}' }
+  }
+  const { context, calls } = mockNetwork(taiwan)
+  const ok = await context.testNode('all', 'TW-01')
+  assert.equal(ok.status, 'pass')
+  assert.equal(ok.region, 'TW')
+  assert.ok(calls.every(call => call.opts?.policy === 'TW-01'))
+
+  const blocked = mockNetwork({
+    ...taiwan,
+    'claude.ai/': { statusCode: 451, body: '<html>Country not supported</html>' }
+  })
+  assert.equal((await blocked.context.testNode('all', 'TW-01')).status, 'fail')
+
+  const mismatch = mockNetwork({
+    ...taiwan,
+    'ipapi.co/json/': { statusCode: 200, body: '{"country_code":"JP"}' }
+  })
+  assert.equal((await mismatch.context.testNode('all', 'TW-01')).status, 'uncertain')
+})
+
 test('a confirmed unsupported region on any AI provider rejects the common node', async () => {
   const { context } = mockNetwork({
     'claude.ai/': { statusCode: 451, body: '<html><title>Country not supported</title></html>' }
