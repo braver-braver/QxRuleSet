@@ -4,9 +4,10 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const config = readFileSync(new URL('../qx-ios.conf', import.meta.url), 'utf8')
-const part = config.match(/^\[dns\]([\s\S]*?)(?=^\[[^\]]+\]|$)/m)
-assert.ok(part, 'missing [dns]')
-const dns = part[1].split(/\r?\n/)
+const dnsStart = config.indexOf('[dns]')
+const dnsEnd = config.indexOf('[task_local]', dnsStart)
+assert.ok(dnsStart >= 0 && dnsEnd > dnsStart, 'missing or unordered DNS section')
+const dns = config.slice(dnsStart + '[dns]'.length, dnsEnd).split(/\r?\n/)
   .map(s => s.trim()).filter(s => s && !s.startsWith('#'))
 const doh = dns.filter(s => s.startsWith('doh-server = '))
 
