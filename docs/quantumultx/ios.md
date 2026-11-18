@@ -38,25 +38,28 @@ quantumultX/qx-ios.conf
 
 ## DNS
 
-默认：
+模板 **2026.11.18.1** 起采用“国内域名使用国内 DNS、其他域名使用境外 DNS”的保守分流。参考 [Deep Router 公共 DNS 选择指南](https://deeprouter.org/article/dns-servers-guide) 和 [Quantumult X 官方示例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf)。
 
-```text
-https://dns.alidns.com/dns-query
-https://doh.pub/dns-query
+默认 DoH：
+
+```ini
+# 非国内域名及未单独列出的域名：两台境外 DoH 并发
+doh-server = https://dns.google/dns-query, https://dns.quad9.net/dns-query
+
+# 中国大陆顶级域名
+doh-server = /*.cn/https://dns.alidns.com/dns-query
 ```
 
-域名级映射主要用于国内服务：
+其余域名级映射保留根域与子域两条独立指令（例如 `/qq.com/`、`/*.qq.com/`）；腾讯/微信、京东、哔哩哔哩、网易、iCloud 中国使用 DNSPod，阿里/淘宝/天猫/阿里云使用 AliDNS。域名级 DoH 每个 pattern 仅配置一个上游，避免依赖旧版 QX 不支持的同 pattern 多服务器堆叠。
 
-- Tencent / QQ / WeChat
-- JD
-- BiliBili
-- NetEase
-- iCloud China
-- Alibaba / Taobao / Tmall / Aliyun
+**重要限制：**
 
-不为 OpenAI / Claude / Gemini / GitHub 强制配置境外 DoH。
+- 多个全局 DoH 是**并发查询**，不保证 Google 优先、Quad9 其次，也不能用无域名约束的 `server = 223.5.5.5` 实现第三层国内 DNS 自动回退。
+- `*.cn` 和列出的国内 `.com` 服务不是完整的中国域名数据库；遗漏的国内 `.com` 也会使用 Google / Quad9。发现具体遗漏时再补精确的两条域名级规则，不把所有 `.com` 交给国内 DNS。
+- `geoip, cn, direct` 与 IP-CIDR 控制**连接路由**，不能在 DNS 查询前根据尚未得到的目标 IP 选择 DNS。代理连接的实际目标解析也可能由代理远端完成。
+- 在某些中国大陆网络，Google / Quad9 DoH 可能无法从 QX 隧道稳定到达。首次更新前备份 Profile，测试移动数据与 Wi-Fi；境外 DoH 不通时请恢复旧版 DNS 配置，不要在全局 DoH 列表混入 AliDNS 冒充有序回退。
 
-原因是这些流量通常通过代理策略连接，Quantumult X 的 placeholder / resolve-on-remote 机制使实际代理连接不必依赖本地 DNS 结果；强制直连境外 DoH 反而可能在中国大陆网络环境中引入额外失败点。
+原有 `no-ipv6`、`no-system`、`prefer-doh3` 保持。更新 DNS 后可以重连 Quantumult X Tunnel，使 DoH/HTTP3 设置重新生效。
 
 ## UDP
 
